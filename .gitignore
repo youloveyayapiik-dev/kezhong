@@ -1,0 +1,7 @@
+*.keystore
+*.jks
+*.idsig
+*.apk
+build/
+*.class
+.DS_Store
