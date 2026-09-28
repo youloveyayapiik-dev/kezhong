@@ -252,6 +252,8 @@ public class MainActivity extends Activity {
       Slot next = firstCatchable(now);
       Model.Course shown = next != null ? next.course : plan.course;
       Calendar shownDate = next != null ? next.date : plan.classDate;
+      Slot later = classAfter(shown, shownDate);
+      if (later != null) col.addView(nextCard(later, now));
       addLater(col, shown, shownDate, now);
     }
     if (plan == null || !Model.sameDay(plan.classDate, now)) {
@@ -316,36 +318,40 @@ public class MainActivity extends Activity {
       });
       card.addView(alarm);
     }
-    Slot later = classAfter(course, date);
-    if (later != null) {
-      View line = new View(this);
-      line.setBackgroundColor(0x33FFFFFF);
-      LinearLayout.LayoutParams rule = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-      rule.topMargin = dp(14);
-      rule.bottomMargin = dp(12);
-      card.addView(line, rule);
-      TextView laterKicker = text(12, 0xFFD5DDD6);
-      String laterDay;
-      if (Model.sameDay(later.date, date)) laterDay = "下一节";
-      else if (Model.daysBetween(date, later.date) == 1) laterDay = "明天";
-      else laterDay = Model.WEEKDAY[Model.isoWeekday(later.date)];
-      laterKicker.setText(laterDay);
-      TextView laterTime = text(20, CREAM);
-      laterTime.setTypeface(Typeface.SERIF);
-      laterTime.setText(span(later.course));
-      TextView laterName = text(16, CREAM);
-      laterName.setText(later.course.name);
-      card.addView(laterKicker);
-      card.addView(laterTime);
-      card.addView(laterName);
-      if (later.course.location.length() > 0) {
-        TextView laterPlace = text(14, 0xFFD5DDD6);
-        laterPlace.setText(later.course.location);
-        card.addView(laterPlace);
-      }
-    }
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(8);
+    card.setLayoutParams(lp);
+    return card;
+  }
+
+  private View nextCard(Slot later, Calendar now) {
+    LinearLayout card = vertical(CARD);
+    round(card, 22);
+    stroke(card);
+    pad(card, 20, 16, 20, 16);
+    TextView kicker = text(13, PINE);
+    kicker.setText("下一节");
+    kicker.setTypeface(Typeface.DEFAULT_BOLD);
+    TextView time = text(22, INK);
+    time.setTypeface(Typeface.SERIF);
+    String day = "";
+    if (!Model.sameDay(later.date, now)) {
+      day = Model.daysBetween(now, later.date) == 1 ? "明天  " : Model.WEEKDAY[Model.isoWeekday(later.date)] + "  ";
+    }
+    time.setText(day + span(later.course));
+    TextView name = text(16, INK);
+    name.setTypeface(Typeface.DEFAULT_BOLD);
+    name.setText(later.course.name);
+    card.addView(kicker);
+    card.addView(time);
+    card.addView(name);
+    if (later.course.location.length() > 0) {
+      TextView place = text(15, MUTED);
+      place.setText(later.course.location);
+      card.addView(place);
+    }
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    lp.topMargin = dp(12);
     card.setLayoutParams(lp);
     return card;
   }
