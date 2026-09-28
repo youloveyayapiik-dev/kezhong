@@ -22,6 +22,7 @@ public final class TableParser {
   public static String foundTermStart;
   public static int foundTotalWeeks;
   public static List<Model.Period> foundPeriods;
+  public static List<Model.PeriodSet> foundPeriodSets;
   private static final Map<String, Integer> DAYS = new HashMap<String, Integer>();
 
   static {
@@ -78,6 +79,7 @@ public final class TableParser {
     foundTotalWeeks = 0;
     List<Model.Course> first = readXls(file, settings, null);
     if (!first.isEmpty()) return first;
+    if (foundPeriodSets != null && foundPeriodSets.size() > 1) return first;
     if (foundPeriods != null && foundPeriods.size() >= 3) return first;
     WorkbookSettings encoding = new WorkbookSettings();
     encoding.setEncoding("GBK");
@@ -88,7 +90,7 @@ public final class TableParser {
     Workbook workbook = encoding == null ? Workbook.getWorkbook(file) : Workbook.getWorkbook(file, encoding);
     try {
       List<Model.Course> best = new ArrayList<Model.Course>();
-      List<Model.Period> bestPeriods = new ArrayList<Model.Period>();
+      List<Model.PeriodSet> bestSets = null;
       for (int s = 0; s < workbook.getNumberOfSheets(); s++) {
         Sheet sheet = workbook.getSheet(s);
         int cols = sheet.getColumns();
@@ -111,11 +113,20 @@ public final class TableParser {
         List<Model.Course> parsed = parseMatrix(rows, settings);
         if (parsed.size() > best.size()) best = parsed;
         if (parsed.isEmpty()) {
-          List<Model.Period> periods = Model.parsePeriodText(joinCells(rows));
-          if (periods.size() > bestPeriods.size()) bestPeriods = periods;
+          List<Model.PeriodSet> sets = Model.parsePeriodSets(joinCells(rows));
+          int count = 0;
+          for (Model.PeriodSet set : sets) count += set.periods.size();
+          int bestCount = 0;
+          if (bestSets != null) for (Model.PeriodSet set : bestSets) bestCount += set.periods.size();
+          if (count > bestCount) bestSets = sets;
         }
       }
-      foundPeriods = best.isEmpty() && bestPeriods.size() >= 3 ? bestPeriods : null;
+      foundPeriodSets = best.isEmpty() ? bestSets : null;
+      if (foundPeriodSets != null && foundPeriodSets.size() == 1 && foundPeriodSets.get(0).periods.size() >= 3) {
+        foundPeriods = foundPeriodSets.get(0).periods;
+      } else {
+        foundPeriods = null;
+      }
       return assign(best, settings);
     } finally {
       workbook.close();
@@ -464,10 +475,18 @@ public final class TableParser {
   private static void sniffPeriods(List<String[]> rows, List<Model.Course> courses) {
     if (courses != null && !courses.isEmpty()) {
       foundPeriods = null;
+      foundPeriodSets = null;
       return;
     }
-    List<Model.Period> periods = Model.parsePeriodText(joinCells(rows));
-    foundPeriods = periods.size() >= 3 ? periods : null;
+    foundPeriodSets = Model.parsePeriodSets(joinCells(rows));
+    if (foundPeriodSets.size() == 1 && foundPeriodSets.get(0).periods.size() >= 3) {
+      foundPeriods = foundPeriodSets.get(0).periods;
+    } else if (foundPeriodSets.size() > 1) {
+      foundPeriods = null;
+    } else {
+      foundPeriodSets = null;
+      foundPeriods = null;
+    }
   }
 
   private static String[] sectionRange(List<Model.Period> periods, String spec) {

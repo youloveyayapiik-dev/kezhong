@@ -202,6 +202,7 @@ public final class Model {
     public int totalWeeks = 16;
     public Wake wake = new Wake();
     public List<Period> periods = defaultPeriods();
+    public String motion = "slide";
   }
 
   public static final class WakePlan {
@@ -287,45 +288,188 @@ public final class Model {
     return lo == hi ? String.valueOf(lo) : lo + "-" + hi;
   }
 
+  public static final class PeriodSet {
+    public String name = "";
+    public List<Period> periods = new ArrayList<Period>();
+  }
+
   public static List<Period> parsePeriodText(String text) {
-    List<Period> list = new ArrayList<Period>();
-    if (text == null) return list;
-    int auto = 1;
-    Matcher times = Pattern.compile("(\\d{1,2}[:：.]\\d{2})\\s*[-~到至—–,，\\s]+(\\d{1,2}[:：.]\\d{2})").matcher("");
+    List<PeriodSet> sets = parsePeriodSets(text);
+    if (sets.isEmpty()) return new ArrayList<Period>();
+    return sets.get(0).periods;
+  }
+
+  public static List<PeriodSet> parsePeriodSets(String text) {
+    List<PeriodSet> sets = new ArrayList<PeriodSet>();
+    if (text == null) return sets;
+    List<String> names = new ArrayList<String>();
+    List<int[]> spans = new ArrayList<int[]>();
+    List<List<String[]>> columns = new ArrayList<List<String[]>>();
+    String pending = "";
+    List<String[]> pendingTimes = new ArrayList<String[]>();
+    Matcher clock = Pattern.compile("(\\d{1,2})\\s*[:：.]\\s*(\\d{2})\\s*[-~到至—–]\\s*(\\d{1,2})\\s*[:：.]\\s*(\\d{2})").matcher("");
+    Matcher campus = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9]{1,12}校区)").matcher("");
     for (String raw : text.split("\\r?\\n")) {
-      String line = raw.trim();
+      String line = raw.replace('\u00a0', ' ').trim();
       if (line.length() == 0) continue;
-      times.reset(line);
-      if (!times.find()) continue;
-      String start = normTime(times.group(1));
-      String end = normTime(times.group(2));
-      if (start.length() == 0 || end.length() == 0) continue;
-      if (parseMinutes(start) >= parseMinutes(end)) continue;
-      String head = line.substring(0, times.start());
-      int lo = auto;
-      int hi = auto;
-      Matcher pair = Pattern.compile("(\\d+)\\s*[-~到至—–]\\s*(\\d+)").matcher(head);
-      Matcher one = Pattern.compile("(\\d+)").matcher(head);
-      if (pair.find()) {
-        lo = Integer.parseInt(pair.group(1));
-        hi = Integer.parseInt(pair.group(2));
-        if (lo > hi) {
-          int swap = lo;
-          lo = hi;
-          hi = swap;
-        }
-      } else if (one.find()) {
-        lo = Integer.parseInt(one.group(1));
-        hi = lo;
+      campus.reset(line);
+      while (campus.find()) {
+        if (!names.contains(campus.group(1))) names.add(campus.group(1));
       }
-      if (lo < 1 || hi > 20) continue;
-      fillPeriods(list, lo, hi, start, end);
-      auto = hi + 1;
+      List<String[]> times = new ArrayList<String[]>();
+      clock.reset(line);
+      int first = -1;
+      while (clock.find()) {
+        if (first < 0) first = clock.start();
+        String start = normTime(clock.group(1) + ":" + clock.group(2));
+        String end = normTime(clock.group(3) + ":" + clock.group(4));
+        if (start.length() == 0 || end.length() == 0) continue;
+        if (parseMinutes(start) >= parseMinutes(end)) continue;
+        times.add(new String[] {start, end});
+      }
+      String head = first < 0 ? line : line.substring(0, first);
+      int[] span = indexesIn(head);
+      boolean labeled = span != null || head.contains("节") || head.contains("第");
+      if (skipBell(head) && span == null) continue;
+      if (span != null && !times.isEmpty()) {
+        flushPeriod(spans, columns, pending, pendingTimes);
+        pending = "";
+        pendingTimes = new ArrayList<String[]>();
+        spans.add(span);
+        columns.add(times);
+      } else if (span != null && times.isEmpty()) {
+        flushPeriod(spans, columns, pending, pendingTimes);
+        pending = head;
+        pendingTimes = new ArrayList<String[]>();
+      } else if (!times.isEmpty() && pending.length() > 0) {
+        pendingTimes.addAll(times);
+      } else if (!times.isEmpty() && !labeled && span == null && !hasChinese(head)) {
+        spans.add(new int[] {0, 0});
+        columns.add(times);
+      }
     }
-    Collections.sort(list, new Comparator<Period>() {
-      public int compare(Period a, Period b) { return a.index - b.index; }
-    });
-    return list;
+    flushPeriod(spans, columns, pending, pendingTimes);
+    int width = 1;
+    for (List<String[]> row : columns) width = Math.max(width, row.size());
+    if (width > 3) width = 3;
+    for (int col = 0; col < width; col++) {
+      PeriodSet set = new PeriodSet();
+      set.name = col < names.size() ? names.get(col) : (width == 1 ? "" : "第 " + (col + 1) + " 列");
+      int auto = 1;
+      for (int i = 0; i < spans.size(); i++) {
+        if (col >= columns.get(i).size()) continue;
+        int lo = spans.get(i)[0];
+        int hi = spans.get(i)[1];
+        if (lo <= 0) {
+          lo = auto;
+          hi = auto;
+        }
+        if (lo < 1 || hi > 20) continue;
+        String[] pair = columns.get(i).get(col);
+        fillPeriods(set.periods, lo, hi, pair[0], pair[1]);
+        auto = hi + 1;
+      }
+      Collections.sort(set.periods, new Comparator<Period>() {
+        public int compare(Period a, Period b) { return a.index - b.index; }
+      });
+      if (set.periods.size() >= 3) sets.add(set);
+    }
+    return sets;
+  }
+
+  private static void flushPeriod(List<int[]> spans, List<List<String[]>> columns, String pending, List<String[]> times) {
+    int[] span = indexesIn(pending);
+    if (span == null || times.isEmpty()) return;
+    spans.add(span);
+    columns.add(times);
+  }
+
+  private static boolean skipBell(String head) {
+    return head.contains("起床") || head.contains("早读") || head.contains("午休")
+        || head.contains("就寝") || head.contains("早餐") || head.contains("午餐") || head.contains("晚餐");
+  }
+
+  private static boolean hasChinese(String text) {
+    for (int i = 0; i < text.length(); i++) {
+      if (text.charAt(i) >= 0x4e00) return true;
+    }
+    return false;
+  }
+
+  private static int[] indexesIn(String head) {
+    if (head == null) return null;
+    List<Integer> nums = new ArrayList<Integer>();
+    int i = 0;
+    while (i < head.length()) {
+      char c = head.charAt(i);
+      if (c >= '0' && c <= '9') {
+        int n = 0;
+        while (i < head.length() && head.charAt(i) >= '0' && head.charAt(i) <= '9') {
+          n = n * 10 + head.charAt(i) - '0';
+          i++;
+        }
+        if (n > 0) nums.add(Integer.valueOf(n));
+        continue;
+      }
+      if (c == '十' || cnDigit(c) > 0) {
+        int[] next = new int[] {i};
+        int n = readCn(head, i, next);
+        if (n > 0) {
+          nums.add(Integer.valueOf(n));
+          i = next[0];
+          continue;
+        }
+      }
+      i++;
+    }
+    if (nums.isEmpty()) return null;
+    int lo = nums.get(0).intValue();
+    int hi = nums.get(nums.size() - 1).intValue();
+    if (lo > hi) {
+      int swap = lo;
+      lo = hi;
+      hi = swap;
+    }
+    return new int[] {lo, hi};
+  }
+
+  private static int readCn(String s, int i, int[] next) {
+    if (i >= s.length()) return -1;
+    char c = s.charAt(i);
+    if (c == '十') {
+      i++;
+      int ones = 0;
+      if (i < s.length() && cnDigit(s.charAt(i)) > 0) ones = cnDigit(s.charAt(i++));
+      next[0] = i;
+      return 10 + ones;
+    }
+    int d = cnDigit(c);
+    if (d <= 0) return -1;
+    i++;
+    if (i < s.length() && s.charAt(i) == '十') {
+      i++;
+      int ones = 0;
+      if (i < s.length() && cnDigit(s.charAt(i)) > 0) ones = cnDigit(s.charAt(i++));
+      next[0] = i;
+      return d * 10 + ones;
+    }
+    next[0] = i;
+    return d;
+  }
+
+  private static int cnDigit(char c) {
+    switch (c) {
+      case '一': return 1;
+      case '二': return 2;
+      case '三': return 3;
+      case '四': return 4;
+      case '五': return 5;
+      case '六': return 6;
+      case '七': return 7;
+      case '八': return 8;
+      case '九': return 9;
+      default: return 0;
+    }
   }
 
   private static void fillPeriods(List<Period> list, int lo, int hi, String start, String end) {

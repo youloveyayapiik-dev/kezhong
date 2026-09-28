@@ -18,19 +18,33 @@ mkdir -p "$WORK/classes" "$WORK/dex" "$WORK/gen" "$WORK/compiled"
 "$BT/aapt2" compile --dir "$ROOT/res" -o "$WORK/compiled/res.zip"
 "$BT/aapt2" link -I "$ANDROID_JAR" --manifest "$ROOT/AndroidManifest.xml" \
   --java "$WORK/gen" --min-sdk-version 26 --target-sdk-version 34 \
+  -A "$ROOT/assets" \
   -o "$WORK/linked.apk" "$WORK/compiled/res.zip"
 find "$ROOT/src" "$WORK/gen" -name '*.java' > "$WORK/sources.txt"
-javac --release 11 -encoding UTF-8 -classpath "$ANDROID_JAR:$ROOT/libs/jxl-2.6.12.jar" -d "$WORK/classes" @"$WORK/sources.txt"
+javac --release 11 -encoding UTF-8 -classpath "$ANDROID_JAR:$ROOT/libs/jxl-2.6.12.jar:$ROOT/libs/tesseract.jar" -d "$WORK/classes" @"$WORK/sources.txt"
 "$BT/d8" --min-api 26 --lib "$ANDROID_JAR" --output "$WORK/dex" \
-  "$ROOT/libs/jxl-2.6.12.jar" $(find "$WORK/classes" -name '*.class')
+  "$ROOT/libs/jxl-2.6.12.jar" "$ROOT/libs/tesseract.jar" $(find "$WORK/classes" -name '*.class')
 cp "$WORK/linked.apk" "$WORK/unsigned.apk"
-python3 - "$WORK" <<'PY'
+python3 - "$WORK" "$ROOT" <<'PY'
 import os, sys, zipfile
-work = sys.argv[1]
+work, root = sys.argv[1], sys.argv[2]
 z = zipfile.ZipFile(work + "/unsigned.apk", "a")
 for name in sorted(os.listdir(work + "/dex")):
     if name.endswith(".dex"):
         z.write(work + "/dex/" + name, name)
+jni = os.path.join(root, "jniLibs")
+if os.path.isdir(jni):
+    for abi in os.listdir(jni):
+        folder = os.path.join(jni, abi)
+        if not os.path.isdir(folder):
+            continue
+        for so in os.listdir(folder):
+            if not so.endswith(".so"):
+                continue
+            info = zipfile.ZipInfo("lib/" + abi + "/" + so)
+            info.compress_type = zipfile.ZIP_STORED
+            with open(os.path.join(folder, so), "rb") as fh:
+                z.writestr(info, fh.read())
 z.close()
 PY
 "$BT/zipalign" -f -p 4 "$WORK/unsigned.apk" "$WORK/aligned.apk"

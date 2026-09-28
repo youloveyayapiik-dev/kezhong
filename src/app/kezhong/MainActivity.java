@@ -7,6 +7,8 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -55,6 +57,7 @@ public class MainActivity extends Activity {
   private static final int[] TONES = {0xFFE7EFEA, 0xFFF3EBE1, 0xFFE8EEF2, 0xFFF6EFE6};
   private static final int REQ_FILE = 41;
   private static final int REQ_CALENDAR = 42;
+  private static final int REQ_IMAGE = 43;
 
   private Store store;
   private int tab;
@@ -118,23 +121,70 @@ public class MainActivity extends Activity {
       old.clearFocus();
       old.animate().cancel();
     }
-    if (!slide || old == null) {
+    if (!slide || old == null || "none".equals(store.settings.motion)) {
       body.removeAllViews();
       body.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     } else {
       body.addView(page, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-      final View leaving = old;
-      final int dx = dp(36) * direction;
-      page.setTranslationX(dx);
-      page.setAlpha(0f);
-      page.animate().translationX(0).alpha(1f).setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
-      leaving.animate().translationX(-dx).alpha(0f).setDuration(200).setInterpolator(new DecelerateInterpolator()).withEndAction(new Runnable() {
-        public void run() {
-          if (leaving.getParent() == body) body.removeView(leaving);
-        }
-      }).start();
+      animatePage(page, old, direction);
     }
     paintNav();
+  }
+
+  private void animatePage(final View page, final View leaving, int direction) {
+    String motion = store.settings.motion == null ? "slide" : store.settings.motion;
+    final int w = Math.max(body.getWidth(), 1);
+    final int h = Math.max(body.getHeight(), 1);
+    float distance = 8000f * getResources().getDisplayMetrics().density;
+    page.setAlpha(0f);
+    if ("fade".equals(motion)) {
+      page.animate().alpha(1f).setDuration(280).setInterpolator(new DecelerateInterpolator()).start();
+      leaving.animate().alpha(0f).setDuration(220).withEndAction(new Runnable() {
+        public void run() { drop(leaving); }
+      }).start();
+      return;
+    }
+    if ("turn".equals(motion)) {
+      page.setCameraDistance(distance);
+      leaving.setCameraDistance(distance);
+      page.setPivotX(w / 2f);
+      page.setPivotY(h / 2f);
+      leaving.setPivotX(w / 2f);
+      leaving.setPivotY(h / 2f);
+      page.setRotationY(direction * 75f);
+      page.animate().rotationY(0f).alpha(1f).setDuration(360).setInterpolator(new DecelerateInterpolator()).start();
+      leaving.animate().rotationY(-direction * 75f).alpha(0f).setDuration(320).withEndAction(new Runnable() {
+        public void run() { drop(leaving); }
+      }).start();
+      return;
+    }
+    if ("flip".equals(motion)) {
+      page.setCameraDistance(distance);
+      leaving.setCameraDistance(distance);
+      page.setPivotX(direction > 0 ? 0 : w);
+      page.setPivotY(h / 2f);
+      leaving.setPivotX(direction > 0 ? w : 0);
+      leaving.setPivotY(h / 2f);
+      page.setRotationY(direction > 0 ? 88f : -88f);
+      page.animate().rotationY(0f).alpha(1f).setDuration(380).setInterpolator(new DecelerateInterpolator()).start();
+      leaving.animate().rotationY(direction > 0 ? -88f : 88f).alpha(0f).setDuration(320).withEndAction(new Runnable() {
+        public void run() { drop(leaving); }
+      }).start();
+      return;
+    }
+    final int dx = dp(36) * direction;
+    page.setTranslationX(dx);
+    page.animate().translationX(0).alpha(1f).setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
+    leaving.animate().translationX(-dx).alpha(0f).setDuration(200).setInterpolator(new DecelerateInterpolator()).withEndAction(new Runnable() {
+      public void run() { drop(leaving); }
+    }).start();
+  }
+
+  private void drop(View leaving) {
+    leaving.setRotationY(0f);
+    leaving.setTranslationX(0f);
+    leaving.setAlpha(1f);
+    if (leaving.getParent() == body) body.removeView(leaving);
   }
 
   private LinearLayout header() {
@@ -150,6 +200,11 @@ public class MainActivity extends Activity {
       public void onClick(View v) { openSettings(); }
     });
     row.addView(gear, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    Button motion = button("翻页", false);
+    motion.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openMotion(); }
+    });
+    row.addView(motion, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     return row;
   }
 
@@ -633,6 +688,16 @@ public class MainActivity extends Activity {
       }
     });
     col.addView(file);
+    Button picture = button("从图片识别", false);
+    picture.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(intent, REQ_IMAGE);
+      }
+    });
+    col.addView(picture);
     TextView note = text(14, pending.isEmpty() ? MUTED : PINE);
     note.setText(pendingNote);
     pad(note, 4, 8, 4, 4);
@@ -1019,14 +1084,12 @@ public class MainActivity extends Activity {
   }
 
   private void review(List<Model.Course> found, String fail) {
+    if ((found == null || found.isEmpty()) && fail == null && TableParser.foundPeriodSets != null && TableParser.foundPeriodSets.size() > 1) {
+      choosePeriods(TableParser.foundPeriodSets);
+      return;
+    }
     if ((found == null || found.isEmpty()) && fail == null && TableParser.foundPeriods != null && TableParser.foundPeriods.size() >= 3) {
-      store.settings.periods = TableParser.foundPeriods;
-      int changed = Model.applySectionTimes(store.courses, store.settings.periods);
-      store.save();
-      pending = new ArrayList<Model.Course>();
-      pendingWarnings = new ArrayList<String>();
-      pendingNote = "读到 " + store.settings.periods.size() + " 节上课时间，已套到 " + changed + " 门课。";
-      show(3);
+      adoptPeriods(TableParser.foundPeriods, "");
       return;
     }
     pending = found == null ? new ArrayList<Model.Course>() : found;
@@ -1040,6 +1103,10 @@ public class MainActivity extends Activity {
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == REQ_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+      readImage(data.getData());
+      return;
+    }
     if (requestCode != REQ_FILE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
     Uri uri = data.getData();
     try {
@@ -1080,7 +1147,7 @@ public class MainActivity extends Activity {
       }
       review(TableParser.fromText(text, store.settings), null);
     } catch (Exception e) {
-      review(new ArrayList<Model.Course>(), "这个文件读不了。xls、xlsx、csv 都可以，或把表格复制成文字再识别。");
+      review(new ArrayList<Model.Course>(), "这个文件读不了。xls、xlsx、csv 或图片都可以。");
     }
   }
 
@@ -1299,17 +1366,18 @@ public class MainActivity extends Activity {
       public void onShow(android.content.DialogInterface d) {
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(new View.OnClickListener() {
           public void onClick(View v) {
-            List<Model.Period> parsed = Model.parsePeriodText(paste.getText().toString());
-            if (parsed.size() < 1) {
-              toast("没读到时间。一行写成 1 08:00-08:45");
+            List<Model.PeriodSet> parsed = Model.parsePeriodSets(paste.getText().toString());
+            if (parsed.isEmpty()) {
+              toast("没读到时间。一行写成 1 08:00-08:45，或 第一、二节 8:30-9:50");
               return;
             }
-            for (int i = 0; i < starts.size(); i++) {
-              Model.Period period = Model.findPeriod(parsed, i + 1);
-              starts.get(i).setText(period == null ? "" : period.start);
-              ends.get(i).setText(period == null ? "" : period.end);
+            if (parsed.size() > 1) {
+              dialog.dismiss();
+              choosePeriods(parsed);
+              return;
             }
-            toast("填了 " + parsed.size() + " 节，确认后保存");
+            fillPeriodFields(starts, ends, parsed.get(0).periods);
+            toast("填了 " + parsed.get(0).periods.size() + " 节，确认后保存");
           }
         });
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
@@ -1342,6 +1410,184 @@ public class MainActivity extends Activity {
     dialog.dismiss();
     toast(changed == 0 ? "已保存上课时间" : "已套到 " + changed + " 门课");
     show(tab);
+  }
+
+  private void fillPeriodFields(List<EditText> starts, List<EditText> ends, List<Model.Period> parsed) {
+    for (int i = 0; i < starts.size(); i++) {
+      Model.Period period = Model.findPeriod(parsed, i + 1);
+      starts.get(i).setText(period == null ? "" : period.start);
+      ends.get(i).setText(period == null ? "" : period.end);
+    }
+  }
+
+  private void adoptPeriods(List<Model.Period> periods, String name) {
+    store.settings.periods = periods;
+    int changed = Model.applySectionTimes(store.courses, periods);
+    store.save();
+    pending = new ArrayList<Model.Course>();
+    pendingWarnings = new ArrayList<String>();
+    String title = name.length() == 0 ? "" : name + "  ";
+    pendingNote = title + "读到 " + periods.size() + " 节上课时间，已套到 " + changed + " 门课。";
+    show(3);
+  }
+
+  private void choosePeriods(final List<Model.PeriodSet> sets) {
+    String[] labels = new String[sets.size()];
+    for (int i = 0; i < sets.size(); i++) {
+      Model.PeriodSet set = sets.get(i);
+      Model.Period first = set.periods.get(0);
+      labels[i] = (set.name.length() == 0 ? "方案 " + (i + 1) : set.name) + "  " + first.start + "-" + set.periods.get(set.periods.size() - 1).end;
+    }
+    new AlertDialog.Builder(this)
+        .setTitle("这张表有两套时间")
+        .setItems(labels, new android.content.DialogInterface.OnClickListener() {
+          public void onClick(android.content.DialogInterface dialog, int which) {
+            adoptPeriods(sets.get(which).periods, sets.get(which).name);
+          }
+        })
+        .setNegativeButton("取消", null)
+        .show();
+  }
+
+  private void readImage(final Uri uri) {
+    toast("正在识别图片");
+    new Thread(new Runnable() {
+      public void run() {
+        try {
+          InputStream probe = getContentResolver().openInputStream(uri);
+          BitmapFactory.Options bounds = new BitmapFactory.Options();
+          bounds.inJustDecodeBounds = true;
+          BitmapFactory.decodeStream(probe, null, bounds);
+          probe.close();
+          int sample = 1;
+          int max = Math.max(bounds.outWidth, bounds.outHeight);
+          while (max / sample > 1800) sample *= 2;
+          BitmapFactory.Options opts = new BitmapFactory.Options();
+          opts.inSampleSize = sample;
+          InputStream in = getContentResolver().openInputStream(uri);
+          final Bitmap bitmap = BitmapFactory.decodeStream(in, null, opts);
+          in.close();
+          if (bitmap == null) throw new IllegalStateException("图片打不开");
+          final String text = Ocr.read(MainActivity.this, bitmap);
+          bitmap.recycle();
+          runOnUiThread(new Runnable() {
+            public void run() { useOcr(text); }
+          });
+        } catch (Exception e) {
+          runOnUiThread(new Runnable() {
+            public void run() { toast("图片没认出来"); }
+          });
+        }
+      }
+    }).start();
+  }
+
+  private void useOcr(String text) {
+    String raw = text == null ? "" : text.trim();
+    if (raw.length() == 0) {
+      toast("图片里没有认出字");
+      return;
+    }
+    List<Model.Course> courses = TableParser.fromText(raw, store.settings);
+    if (courses != null && !courses.isEmpty()) {
+      review(courses, null);
+      return;
+    }
+    List<Model.PeriodSet> sets = Model.parsePeriodSets(raw);
+    if (sets.size() > 1) {
+      choosePeriods(sets);
+      return;
+    }
+    if (sets.size() == 1) {
+      adoptPeriods(sets.get(0).periods, sets.get(0).name);
+      return;
+    }
+    pending = new ArrayList<Model.Course>();
+    pendingWarnings = new ArrayList<String>();
+    String snippet = raw.length() > 180 ? raw.substring(0, 180) : raw;
+    pendingNote = "图片里没认出课表或上课时间。认出的字：\n" + snippet;
+    show(3);
+  }
+
+  private void openMotion() {
+    final String[] keys = {"slide", "fade", "turn", "flip"};
+    final String[] names = {"经典", "淡入淡出", "转盘", "翻页"};
+    final int[] picked = new int[] {0};
+    String current = store.settings.motion == null ? "slide" : store.settings.motion;
+    for (int i = 0; i < keys.length; i++) if (keys[i].equals(current)) picked[0] = i;
+    LinearLayout wrap = vertical(0);
+    pad(wrap, 16, 8, 16, 4);
+    TextView title = text(16, INK);
+    title.setText("翻页效果");
+    pad(title, 4, 0, 4, 12);
+    wrap.addView(title);
+    final LinearLayout row = horizontal();
+    final LinearLayout[] boxes = new LinearLayout[4];
+    for (int i = 0; i < 4; i++) {
+      final int index = i;
+      LinearLayout item = vertical(0);
+      item.setGravity(Gravity.CENTER_HORIZONTAL);
+      FrameLayout card = new FrameLayout(this);
+      card.addView(motionPage(keys[i]));
+      pad(card, 8, 10, 8, 10);
+      item.addView(card, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(96)));
+      TextView label = text(14, MUTED);
+      label.setText(names[i]);
+      label.setGravity(Gravity.CENTER);
+      pad(label, 0, 8, 0, 0);
+      item.addView(label);
+      item.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          picked[0] = index;
+          for (int n = 0; n < boxes.length; n++) paintMotion(boxes[n], n == index);
+        }
+      });
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+      if (i > 0) lp.leftMargin = dp(8);
+      boxes[i] = item;
+      row.addView(item, lp);
+    }
+    for (int i = 0; i < boxes.length; i++) paintMotion(boxes[i], i == picked[0]);
+    wrap.addView(row);
+    new AlertDialog.Builder(this)
+        .setView(wrap)
+        .setPositiveButton("完成", new android.content.DialogInterface.OnClickListener() {
+          public void onClick(android.content.DialogInterface dialog, int which) {
+            store.settings.motion = keys[picked[0]];
+            store.save();
+          }
+        })
+        .show();
+  }
+
+  private void paintMotion(LinearLayout item, boolean on) {
+    FrameLayout card = (FrameLayout) item.getChildAt(0);
+    GradientDrawable bg = new GradientDrawable();
+    bg.setCornerRadius(dp(18));
+    bg.setColor(0xFFF7F4EE);
+    bg.setStroke(dp(on ? 3 : 1), on ? 0xFF2563EB : LINE);
+    card.setBackground(bg);
+    TextView label = (TextView) item.getChildAt(1);
+    label.setTextColor(on ? 0xFF2563EB : MUTED);
+    label.setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+  }
+
+  private View motionPage(String kind) {
+    View page = new View(this);
+    GradientDrawable paper = new GradientDrawable();
+    paper.setCornerRadius(dp(8));
+    paper.setColor(0xFFD9D3C7);
+    page.setBackground(paper);
+    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(36), dp(52), Gravity.CENTER);
+    page.setLayoutParams(lp);
+    if ("fade".equals(kind)) page.setAlpha(0.4f);
+    if ("turn".equals(kind)) page.setRotation(16f);
+    if ("flip".equals(kind)) {
+      page.setPivotX(0f);
+      page.setRotationY(55f);
+      page.setCameraDistance(8000f * getResources().getDisplayMetrics().density);
+    }
+    return page;
   }
 
   private void openSettings() {
