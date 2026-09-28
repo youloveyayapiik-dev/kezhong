@@ -5,6 +5,8 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -225,6 +227,133 @@ public final class Model {
     List<Period> list = new ArrayList<Period>();
     for (int i = 0; i < rows.length; i++) list.add(new Period(i + 1, rows[i][0], rows[i][1]));
     return list;
+  }
+
+  public static Period findPeriod(List<Period> periods, int index) {
+    if (periods == null) return null;
+    for (Period period : periods) if (period.index == index) return period;
+    return null;
+  }
+
+  /** 返回 [上课, 下课, 节次]。节次写成 3 或 3-4。 */
+  public static String[] sectionTimes(String spec, List<Period> periods) {
+    if (spec == null || periods == null) return null;
+    Matcher pair = Pattern.compile("(\\d+)\\s*[-~到至—–]\\s*(\\d+)").matcher(spec);
+    if (pair.find()) {
+      int lo = Math.min(Integer.parseInt(pair.group(1)), Integer.parseInt(pair.group(2)));
+      int hi = Math.max(Integer.parseInt(pair.group(1)), Integer.parseInt(pair.group(2)));
+      Period a = findPeriod(periods, lo);
+      Period b = findPeriod(periods, hi);
+      if (a != null && b != null && a.start.length() > 0 && b.end.length() > 0) {
+        return new String[] {a.start, b.end, lo == hi ? String.valueOf(lo) : lo + "-" + hi};
+      }
+    }
+    String one = spec.trim();
+    if (one.matches("\\d+")) {
+      Period period = findPeriod(periods, Integer.parseInt(one));
+      if (period != null && period.start.length() > 0 && period.end.length() > 0) {
+        return new String[] {period.start, period.end, String.valueOf(period.index)};
+      }
+    }
+    return null;
+  }
+
+  public static int applySectionTimes(List<Course> courses, List<Period> periods) {
+    int changed = 0;
+    List<Period> defaults = defaultPeriods();
+    for (Course course : courses) {
+      String spec = course.section == null ? "" : course.section.trim();
+      if (spec.length() == 0) spec = inferSection(course, defaults);
+      String[] times = sectionTimes(spec, periods);
+      if (times == null) continue;
+      course.section = times[2];
+      course.start = times[0];
+      course.end = times[1];
+      changed++;
+    }
+    return changed;
+  }
+
+  private static String inferSection(Course course, List<Period> defaults) {
+    int start = parseMinutes(course.start);
+    int end = parseMinutes(course.end);
+    int lo = 0;
+    int hi = 0;
+    for (Period period : defaults) {
+      if (parseMinutes(period.start) == start) lo = period.index;
+      if (parseMinutes(period.end) == end) hi = period.index;
+    }
+    if (lo == 0 || hi == 0 || hi < lo) return "";
+    return lo == hi ? String.valueOf(lo) : lo + "-" + hi;
+  }
+
+  public static List<Period> parsePeriodText(String text) {
+    List<Period> list = new ArrayList<Period>();
+    if (text == null) return list;
+    int auto = 1;
+    Matcher times = Pattern.compile("(\\d{1,2}[:：.]\\d{2})\\s*[-~到至—–,，\\s]+(\\d{1,2}[:：.]\\d{2})").matcher("");
+    for (String raw : text.split("\\r?\\n")) {
+      String line = raw.trim();
+      if (line.length() == 0) continue;
+      times.reset(line);
+      if (!times.find()) continue;
+      String start = normTime(times.group(1));
+      String end = normTime(times.group(2));
+      if (start.length() == 0 || end.length() == 0) continue;
+      if (parseMinutes(start) >= parseMinutes(end)) continue;
+      String head = line.substring(0, times.start());
+      int lo = auto;
+      int hi = auto;
+      Matcher pair = Pattern.compile("(\\d+)\\s*[-~到至—–]\\s*(\\d+)").matcher(head);
+      Matcher one = Pattern.compile("(\\d+)").matcher(head);
+      if (pair.find()) {
+        lo = Integer.parseInt(pair.group(1));
+        hi = Integer.parseInt(pair.group(2));
+        if (lo > hi) {
+          int swap = lo;
+          lo = hi;
+          hi = swap;
+        }
+      } else if (one.find()) {
+        lo = Integer.parseInt(one.group(1));
+        hi = lo;
+      }
+      if (lo < 1 || hi > 20) continue;
+      fillPeriods(list, lo, hi, start, end);
+      auto = hi + 1;
+    }
+    Collections.sort(list, new Comparator<Period>() {
+      public int compare(Period a, Period b) { return a.index - b.index; }
+    });
+    return list;
+  }
+
+  private static void fillPeriods(List<Period> list, int lo, int hi, String start, String end) {
+    int from = parseMinutes(start);
+    int to = parseMinutes(end);
+    int count = hi - lo + 1;
+    int gap = count == 1 ? 0 : 10;
+    int each = count == 1 ? to - from : (to - from - gap * (count - 1)) / count;
+    if (each < 20) {
+      putPeriod(list, lo, start, end);
+      if (hi != lo) putPeriod(list, hi, start, end);
+      return;
+    }
+    int cursor = from;
+    for (int index = lo; index <= hi; index++) {
+      int stop = count == 1 ? to : cursor + each;
+      putPeriod(list, index, formatMinutes(cursor), formatMinutes(stop));
+      cursor = stop + gap;
+    }
+  }
+
+  private static void putPeriod(List<Period> list, int index, String start, String end) {
+    Period period = findPeriod(list, index);
+    if (period == null) list.add(new Period(index, start, end));
+    else {
+      period.start = start;
+      period.end = end;
+    }
   }
 
   public static int parseMinutes(String hhmm) {

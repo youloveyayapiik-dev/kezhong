@@ -57,6 +57,20 @@ public final class Store {
       settings.wake.buffer = wake.optInt("bufferMin", 15);
       settings.wake.remind = wake.optInt("classRemindMin", 20);
     }
+    JSONArray periods = s.optJSONArray("periods");
+    if (periods != null && periods.length() > 0) {
+      settings.periods = new ArrayList<Model.Period>();
+      for (int i = 0; i < periods.length(); i++) {
+        JSONObject item = periods.optJSONObject(i);
+        if (item == null) continue;
+        String start = item.optString("start", "");
+        String end = item.optString("end", "");
+        int index = item.optInt("index", i + 1);
+        if (start.length() == 0 || end.length() == 0) continue;
+        settings.periods.add(new Model.Period(index, start, end));
+      }
+      if (settings.periods.isEmpty()) settings.periods = Model.defaultPeriods();
+    }
     return settings;
   }
 
@@ -106,6 +120,15 @@ public final class Store {
       wake.put("bufferMin", settings.wake.buffer);
       wake.put("classRemindMin", settings.wake.remind);
       s.put("wake", wake);
+      JSONArray periods = new JSONArray();
+      for (Model.Period period : settings.periods) {
+        JSONObject item = new JSONObject();
+        item.put("index", period.index);
+        item.put("start", period.start);
+        item.put("end", period.end);
+        periods.put(item);
+      }
+      s.put("periods", periods);
       root.put("settings", s);
       JSONArray arr = new JSONArray();
       for (Model.Course course : courses) {

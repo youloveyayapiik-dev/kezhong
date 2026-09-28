@@ -21,6 +21,7 @@ import org.xmlpull.v1.XmlPullParser;
 public final class TableParser {
   public static String foundTermStart;
   public static int foundTotalWeeks;
+  public static List<Model.Period> foundPeriods;
   private static final Map<String, Integer> DAYS = new HashMap<String, Integer>();
 
   static {
@@ -41,7 +42,9 @@ public final class TableParser {
     String raw = text == null ? "" : text.replace("\uFEFF", "").trim();
     if (raw.startsWith("{") || raw.startsWith("[")) return new ArrayList<Model.Course>();
     List<String[]> rows = split(raw);
-    return assign(parseMatrix(rows, settings), settings);
+    List<Model.Course> courses = assign(parseMatrix(rows, settings), settings);
+    sniffPeriods(rows, courses);
+    return courses;
   }
 
   public static List<Model.Course> fromXlsx(File file, Model.Settings settings) throws Exception {
@@ -62,7 +65,9 @@ public final class TableParser {
       }
       if (sheet == null) return new ArrayList<Model.Course>();
       List<String[]> rows = sheetRows(zip, sheet, shared);
-      return assign(parseMatrix(rows, settings), settings);
+      List<Model.Course> courses = assign(parseMatrix(rows, settings), settings);
+      sniffPeriods(rows, courses);
+      return courses;
     } finally {
       zip.close();
     }
@@ -73,6 +78,7 @@ public final class TableParser {
     foundTotalWeeks = 0;
     List<Model.Course> first = readXls(file, settings, null);
     if (!first.isEmpty()) return first;
+    if (foundPeriods != null && foundPeriods.size() >= 3) return first;
     WorkbookSettings encoding = new WorkbookSettings();
     encoding.setEncoding("GBK");
     return readXls(file, settings, encoding);
@@ -82,6 +88,7 @@ public final class TableParser {
     Workbook workbook = encoding == null ? Workbook.getWorkbook(file) : Workbook.getWorkbook(file, encoding);
     try {
       List<Model.Course> best = new ArrayList<Model.Course>();
+      List<Model.Period> bestPeriods = new ArrayList<Model.Period>();
       for (int s = 0; s < workbook.getNumberOfSheets(); s++) {
         Sheet sheet = workbook.getSheet(s);
         int cols = sheet.getColumns();
@@ -103,7 +110,12 @@ public final class TableParser {
         }
         List<Model.Course> parsed = parseMatrix(rows, settings);
         if (parsed.size() > best.size()) best = parsed;
+        if (parsed.isEmpty()) {
+          List<Model.Period> periods = Model.parsePeriodText(joinCells(rows));
+          if (periods.size() > bestPeriods.size()) bestPeriods = periods;
+        }
       }
+      foundPeriods = best.isEmpty() && bestPeriods.size() >= 3 ? bestPeriods : null;
       return assign(best, settings);
     } finally {
       workbook.close();
@@ -441,20 +453,25 @@ public final class TableParser {
     return null;
   }
 
+  private static String joinCells(List<String[]> rows) {
+    StringBuilder sb = new StringBuilder();
+    for (String[] row : rows) {
+      for (String cell : row) sb.append(cell).append('\n');
+    }
+    return sb.toString();
+  }
+
+  private static void sniffPeriods(List<String[]> rows, List<Model.Course> courses) {
+    if (courses != null && !courses.isEmpty()) {
+      foundPeriods = null;
+      return;
+    }
+    List<Model.Period> periods = Model.parsePeriodText(joinCells(rows));
+    foundPeriods = periods.size() >= 3 ? periods : null;
+  }
+
   private static String[] sectionRange(List<Model.Period> periods, String spec) {
-    Matcher pair = Pattern.compile("(\\d+)\\s*[-~到至—–]\\s*(\\d+)").matcher(spec);
-    if (pair.find()) {
-      int a = Integer.parseInt(pair.group(1));
-      int b = Integer.parseInt(pair.group(2));
-      Model.Period pa = period(periods, Math.min(a, b));
-      Model.Period pb = period(periods, Math.max(a, b));
-      if (pa != null && pb != null) return new String[] {pa.start, pb.end, Math.min(a, b) + "-" + Math.max(a, b)};
-    }
-    if (spec.matches("\\d+")) {
-      Model.Period p = period(periods, Integer.parseInt(spec));
-      if (p != null) return new String[] {p.start, p.end, String.valueOf(p.index)};
-    }
-    return null;
+    return Model.sectionTimes(spec, periods);
   }
 
   private static Model.Period period(List<Model.Period> periods, int index) {
@@ -462,11 +479,11 @@ public final class TableParser {
     return null;
   }
 
-  private static Model.Course fromCell(String cell, int day, String[] slot, int total) {
+  private static Model.Course fromCell(String cell, int day, String[] slot, int total, List<Model.Period> periods) {
     String text = cell.replace('\u00a0', ' ').replace('／', '/').trim();
     if (text.length() == 0 || text.matches("[-—/无空]+")) return null;
     if (text.startsWith("注") || text.startsWith("其他课程") || text.contains("正式上课")) return null;
-    Model.Course slash = slashCourse(text, day, slot, total);
+    Model.Course slash = slashCourse(text, day, slot, total, periods);
     if (slash != null) return slash;
     String blob = text.replace('\n', ' ').replaceAll("\\s+", " ").trim();
     String weekRaw = weekSpan(blob);
@@ -528,7 +545,7 @@ public final class TableParser {
     return course;
   }
 
-  private static Model.Course slashCourse(String text, int day, String[] slot, int total) {
+  private static Model.Course slashCourse(String text, int day, String[] slot, int total, List<Model.Period> periods) {
     String line = text.replace('\n', ' ').replaceAll("\\s+", " ").trim();
     Matcher matcher = Pattern.compile("^(.+?)/[（(]([^）)]+)[）)]\\s*([^/]*)/([^/]*)/([^/]*)$").matcher(line);
     if (!matcher.find()) return null;
@@ -538,7 +555,7 @@ public final class TableParser {
     String location = matcher.group(4).trim();
     String teacher = matcher.group(5).trim().replace("老师", "");
     if (name.length() == 0 || name.startsWith("注")) return null;
-    String[] mapped = sectionRange(Model.defaultPeriods(), section);
+    String[] mapped = sectionRange(periods, section);
     String start = mapped != null ? mapped[0] : slot[0];
     String end = mapped != null ? mapped[1] : slot[1];
     String sectionLabel = mapped != null ? mapped[2] : slot[2];
@@ -609,7 +626,7 @@ public final class TableParser {
         String[] chunks = cell.split("\\r?\\n+");
         if (chunks.length == 0) chunks = new String[] {cell};
         for (String chunk : chunks) {
-          Model.Course course = fromCell(chunk, col[1], slot, settings.totalWeeks);
+          Model.Course course = fromCell(chunk, col[1], slot, settings.totalWeeks, settings.periods);
           if (course != null) courses.add(course);
         }
       }
@@ -708,7 +725,7 @@ public final class TableParser {
     Integer day = dayFromText(text);
     String[] slot = timeSlot(text, settings.periods);
     if (day == null || slot == null) return null;
-    return fromCell(text, day.intValue(), slot, settings.totalWeeks);
+    return fromCell(text, day.intValue(), slot, settings.totalWeeks, settings.periods);
   }
 
   private static List<Model.Course> dedupe(List<Model.Course> courses) {

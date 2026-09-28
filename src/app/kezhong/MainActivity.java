@@ -592,6 +592,11 @@ public class MainActivity extends Activity {
     title.setTypeface(Typeface.DEFAULT_BOLD);
     pad(title, 4, 4, 4, 8);
     col.addView(title);
+    Button times = button(periodSummary(), false);
+    times.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openPeriods(); }
+    });
+    col.addView(times);
     TextView help = text(14, MUTED);
     help.setText("支持 xls、xlsx 和 csv。可以是周一到周日的课表，或带「课程、教师、地点、星期、开始、结束」的清单。教务系统把网页另存成 xls 也可以。");
     col.addView(help);
@@ -1014,6 +1019,16 @@ public class MainActivity extends Activity {
   }
 
   private void review(List<Model.Course> found, String fail) {
+    if ((found == null || found.isEmpty()) && fail == null && TableParser.foundPeriods != null && TableParser.foundPeriods.size() >= 3) {
+      store.settings.periods = TableParser.foundPeriods;
+      int changed = Model.applySectionTimes(store.courses, store.settings.periods);
+      store.save();
+      pending = new ArrayList<Model.Course>();
+      pendingWarnings = new ArrayList<String>();
+      pendingNote = "读到 " + store.settings.periods.size() + " 节上课时间，已套到 " + changed + " 门课。";
+      show(3);
+      return;
+    }
     pending = found == null ? new ArrayList<Model.Course>() : found;
     pendingWarnings = fail != null || pending.isEmpty() ? new ArrayList<String>() : audit(pending);
     String base = fail != null ? fail : (pending.isEmpty() ? "没有识别到课程。检查是不是周一到周日的表头，或课程、星期、时间这几列。" : "识别到 " + pending.size() + " 门课，确认后替换或追加。");
@@ -1226,6 +1241,107 @@ public class MainActivity extends Activity {
       row.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     }
     return row;
+  }
+
+  private String periodSummary() {
+    if (store.settings.periods.isEmpty()) return "上课时间";
+    Model.Period first = store.settings.periods.get(0);
+    return "上课时间  " + first.index + "  " + clockMinutes(Model.parseMinutes(first.start)) + "-" + clockMinutes(Model.parseMinutes(first.end));
+  }
+
+  private void openPeriods() {
+    ScrollView scroll = new ScrollView(this);
+    LinearLayout col = vertical(0);
+    pad(col, 8, 4, 8, 4);
+    TextView hint = text(13, MUTED);
+    hint.setText("课表没写钟点时，按节次套这张表。一行一节，例如 1 08:00-08:45，或 1-2 08:00-09:40。");
+    col.addView(hint);
+    final EditText paste = new EditText(this);
+    paste.setHint("贴时间表");
+    paste.setMinLines(3);
+    paste.setTextColor(INK);
+    paste.setHintTextColor(MUTED);
+    paste.setGravity(Gravity.TOP);
+    col.addView(paste);
+    final List<EditText> starts = new ArrayList<EditText>();
+    final List<EditText> ends = new ArrayList<EditText>();
+    List<Model.Period> periods = store.settings.periods;
+    int count = Math.max(12, periods.size());
+    for (int i = 1; i <= count; i++) {
+      Model.Period period = Model.findPeriod(periods, i);
+      LinearLayout row = horizontal();
+      row.setGravity(Gravity.CENTER_VERTICAL);
+      TextView index = text(14, INK);
+      index.setText(String.valueOf(i));
+      index.setGravity(Gravity.CENTER);
+      EditText start = field(period == null ? "" : period.start, "08:00");
+      EditText end = field(period == null ? "" : period.end, "08:45");
+      starts.add(start);
+      ends.add(end);
+      row.addView(index, new LinearLayout.LayoutParams(dp(28), ViewGroup.LayoutParams.WRAP_CONTENT));
+      LinearLayout.LayoutParams box = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+      box.leftMargin = dp(6);
+      start.setLayoutParams(box);
+      end.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+      row.addView(start);
+      row.addView(end);
+      col.addView(row);
+    }
+    scroll.addView(col);
+    final AlertDialog dialog = new AlertDialog.Builder(this)
+        .setTitle("上课时间")
+        .setView(scroll)
+        .setPositiveButton("保存并套到课表", null)
+        .setNeutralButton("填入粘贴", null)
+        .setNegativeButton("取消", null)
+        .create();
+    dialog.setOnShowListener(new android.content.DialogInterface.OnShowListener() {
+      public void onShow(android.content.DialogInterface d) {
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(new View.OnClickListener() {
+          public void onClick(View v) {
+            List<Model.Period> parsed = Model.parsePeriodText(paste.getText().toString());
+            if (parsed.size() < 1) {
+              toast("没读到时间。一行写成 1 08:00-08:45");
+              return;
+            }
+            for (int i = 0; i < starts.size(); i++) {
+              Model.Period period = Model.findPeriod(parsed, i + 1);
+              starts.get(i).setText(period == null ? "" : period.start);
+              ends.get(i).setText(period == null ? "" : period.end);
+            }
+            toast("填了 " + parsed.size() + " 节，确认后保存");
+          }
+        });
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+          public void onClick(View v) { savePeriods(starts, ends, dialog); }
+        });
+      }
+    });
+    dialog.show();
+  }
+
+  private void savePeriods(List<EditText> starts, List<EditText> ends, AlertDialog dialog) {
+    List<Model.Period> next = new ArrayList<Model.Period>();
+    for (int i = 0; i < starts.size(); i++) {
+      String start = Model.normTime(starts.get(i).getText().toString());
+      String end = Model.normTime(ends.get(i).getText().toString());
+      if (start.length() == 0 && end.length() == 0) continue;
+      if (start.length() == 0 || end.length() == 0 || Model.parseMinutes(start) >= Model.parseMinutes(end)) {
+        toast("第 " + (i + 1) + " 节时间不对");
+        return;
+      }
+      next.add(new Model.Period(i + 1, start, end));
+    }
+    if (next.isEmpty()) {
+      toast("至少写一节课的时间");
+      return;
+    }
+    store.settings.periods = next;
+    int changed = Model.applySectionTimes(store.courses, next);
+    store.save();
+    dialog.dismiss();
+    toast(changed == 0 ? "已保存上课时间" : "已套到 " + changed + " 门课");
+    show(tab);
   }
 
   private void openSettings() {
