@@ -230,7 +230,7 @@ public class MainActivity extends Activity {
   private View pageToday(final Calendar now) {
     ScrollView scroll = new ScrollView(this);
     LinearLayout col = vertical(0);
-    pad(col, 16, 4, 16, 24);
+    pad(col, 16, 4, 16, 108);
     String todayOff = Holidays.off(now);
     if (todayOff != null) {
       TextView banner = text(16, 0xFF9A3412);
@@ -249,7 +249,7 @@ public class MainActivity extends Activity {
       col.addView(cardText("这个学期还没有下一节课。", "先在「课程」里添加，或到「设置」导入课表。"));
     } else {
       col.addView(wakeCard(plan, now));
-      addLater(col, plan);
+      addLater(col, plan, now);
     }
     if (plan == null || !Model.sameDay(plan.classDate, now)) {
       TextView quiet = text(14, MUTED);
@@ -262,7 +262,6 @@ public class MainActivity extends Activity {
       public void onClick(View v) { askCalendar(new ArrayList<Model.Course>(store.courses)); }
     });
     col.addView(allCal);
-    col.addView(wakePrefsCard());
     scroll.addView(col);
     return scroll;
   }
@@ -292,13 +291,10 @@ public class MainActivity extends Activity {
     String missed = missLine(plan, now);
     if (missed.length() > 0) {
       kicker.setText(plan.course.start + " 赶不上了");
-      catchLine.setText(missed + "  " + face());
+      catchLine.setText(missed);
     } else if (plan.wakePassed) {
       kicker.setText("起床过了，现在出门还赶得上");
-      catchLine.setText("");
     }
-    TextView formula = text(12, 0xFFD5DDD6);
-    formula.setText("洗漱 " + store.settings.wake.wash + " 分 + 路程 " + store.settings.wake.commute + " 分 + 容错 " + store.settings.wake.buffer + " 分");
     Button alarm = lightButton(plan.wakePassed ? "仍写入系统闹钟" : "写入系统闹钟");
     alarm.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) {
@@ -311,7 +307,6 @@ public class MainActivity extends Activity {
     card.addView(name);
     if (plan.course.location.length() > 0) card.addView(place);
     if (catchLine.getText().length() > 0) card.addView(catchLine);
-    card.addView(formula);
     card.addView(alarm);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(12);
@@ -319,7 +314,7 @@ public class MainActivity extends Activity {
     return card;
   }
 
-  private void addLater(LinearLayout col, Model.WakePlan plan) {
+  private void addLater(LinearLayout col, Model.WakePlan plan, Calendar now) {
     List<Model.Course> day = Model.onDate(store.courses, store.settings, plan.classDate);
     int skip = -1;
     for (int i = 0; i < day.size(); i++) {
@@ -330,8 +325,9 @@ public class MainActivity extends Activity {
       }
     }
     if (skip < 0 || skip >= day.size() - 1) return;
+    if (!Model.sameDay(plan.classDate, now)) return;
     TextView heading = text(15, INK);
-    heading.setText("下一节");
+    heading.setText("今天还剩");
     heading.setTypeface(Typeface.DEFAULT_BOLD);
     pad(heading, 4, 16, 4, 0);
     col.addView(heading);
@@ -1015,7 +1011,7 @@ public class MainActivity extends Activity {
     Slot next = firstCatchable(now);
     if (next == null) return "后面没有还能赶上的课";
     String when = Model.sameDay(next.date, now) ? "" : Model.WEEKDAY[Model.isoWeekday(next.date)] + " ";
-    return "下一节 " + when + span(next.course) + " " + next.course.name + " 还来得及";
+    return "还能赶上  " + when + span(next.course) + "  " + next.course.name;
   }
 
   private List<String> audit(List<Model.Course> courses) {
@@ -1435,11 +1431,15 @@ public class MainActivity extends Activity {
     String[] labels = new String[sets.size()];
     for (int i = 0; i < sets.size(); i++) {
       Model.PeriodSet set = sets.get(i);
-      Model.Period first = set.periods.get(0);
-      labels[i] = (set.name.length() == 0 ? "方案 " + (i + 1) : set.name) + "  " + first.start + "-" + set.periods.get(set.periods.size() - 1).end;
+      Model.Period first = Model.findPeriod(set.periods, 1);
+      Model.Period second = Model.findPeriod(set.periods, 2);
+      String range = first != null && second != null ? clockMinutes(Model.parseMinutes(first.start)) + "-" + clockMinutes(Model.parseMinutes(second.end)) : "";
+      labels[i] = (set.name.length() == 0 ? "方案 " + (i + 1) : set.name) + "    " + range;
     }
+    boolean campus = false;
+    for (Model.PeriodSet set : sets) if (set.name.contains("校区")) campus = true;
     new AlertDialog.Builder(this)
-        .setTitle("这张表有两套时间")
+        .setTitle(campus ? "选你的校区" : "选上课时间")
         .setItems(labels, new android.content.DialogInterface.OnClickListener() {
           public void onClick(android.content.DialogInterface dialog, int which) {
             adoptPeriods(sets.get(which).periods, sets.get(which).name);
@@ -1494,18 +1494,13 @@ public class MainActivity extends Activity {
       return;
     }
     List<Model.PeriodSet> sets = Model.parsePeriodSets(raw);
-    if (sets.size() > 1) {
+    if (sets.size() > 0) {
       choosePeriods(sets);
-      return;
-    }
-    if (sets.size() == 1) {
-      adoptPeriods(sets.get(0).periods, sets.get(0).name);
       return;
     }
     pending = new ArrayList<Model.Course>();
     pendingWarnings = new ArrayList<String>();
-    String snippet = raw.length() > 180 ? raw.substring(0, 180) : raw;
-    pendingNote = "图片里没认出课表或上课时间。认出的字：\n" + snippet;
+    pendingNote = "没对上上课时间。点上面的上课时间自己填，或把表格拍得更正一点再试。";
     show(3);
   }
 

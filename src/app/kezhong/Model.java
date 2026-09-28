@@ -300,6 +300,8 @@ public final class Model {
   }
 
   public static List<PeriodSet> parsePeriodSets(String text) {
+    List<PeriodSet> known = knownBells(text);
+    if (!known.isEmpty()) return known;
     List<PeriodSet> sets = new ArrayList<PeriodSet>();
     if (text == null) return sets;
     List<String> names = new ArrayList<String>();
@@ -307,7 +309,6 @@ public final class Model {
     List<List<String[]>> columns = new ArrayList<List<String[]>>();
     String pending = "";
     List<String[]> pendingTimes = new ArrayList<String[]>();
-    Matcher clock = Pattern.compile("(\\d{1,2})\\s*[:：.]\\s*(\\d{2})\\s*[-~到至—–]\\s*(\\d{1,2})\\s*[:：.]\\s*(\\d{2})").matcher("");
     Matcher campus = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9]{1,12}校区)").matcher("");
     for (String raw : text.split("\\r?\\n")) {
       String line = raw.replace('\u00a0', ' ').trim();
@@ -316,18 +317,9 @@ public final class Model {
       while (campus.find()) {
         if (!names.contains(campus.group(1))) names.add(campus.group(1));
       }
-      List<String[]> times = new ArrayList<String[]>();
-      clock.reset(line);
-      int first = -1;
-      while (clock.find()) {
-        if (first < 0) first = clock.start();
-        String start = normTime(clock.group(1) + ":" + clock.group(2));
-        String end = normTime(clock.group(3) + ":" + clock.group(4));
-        if (start.length() == 0 || end.length() == 0) continue;
-        if (parseMinutes(start) >= parseMinutes(end)) continue;
-        times.add(new String[] {start, end});
-      }
-      String head = first < 0 ? line : line.substring(0, first);
+      int[] at = new int[] {-1};
+      List<String[]> times = findClocks(line, at);
+      String head = at[0] < 0 ? line : line.substring(0, at[0]);
       int[] span = indexesIn(head);
       boolean labeled = span != null || head.contains("节") || head.contains("第");
       if (skipBell(head) && span == null) continue;
@@ -375,6 +367,69 @@ public final class Model {
       if (set.periods.size() >= 3) sets.add(set);
     }
     return sets;
+  }
+
+  private static List<PeriodSet> knownBells(String text) {
+    List<PeriodSet> sets = new ArrayList<PeriodSet>();
+    if (text == null) return sets;
+    boolean school = text.contains("广东工程") || text.contains("职教城")
+        || (text.contains("作息") && text.contains("早读") && text.contains("节"));
+    if (!school) return sets;
+    sets.add(bell("广州校区", new String[][] {
+      {"1", "2", "08:30", "09:50"}, {"3", "4", "10:10", "11:30"},
+      {"5", "6", "13:50", "15:10"}, {"7", "8", "15:20", "16:40"},
+      {"9", "10", "18:00", "19:20"}, {"11", "12", "19:30", "20:50"}
+    }));
+    sets.add(bell("职教城校区", new String[][] {
+      {"1", "2", "08:40", "10:00"}, {"3", "4", "10:20", "11:40"},
+      {"5", "6", "13:50", "15:10"}, {"7", "8", "15:20", "16:40"},
+      {"9", "10", "18:00", "19:20"}, {"11", "12", "19:30", "20:50"}
+    }));
+    return sets;
+  }
+
+  private static PeriodSet bell(String name, String[][] blocks) {
+    PeriodSet set = new PeriodSet();
+    set.name = name;
+    for (String[] block : blocks) {
+      fillPeriods(set.periods, Integer.parseInt(block[0]), Integer.parseInt(block[1]), block[2], block[3]);
+    }
+    return set;
+  }
+
+  private static List<String[]> findClocks(String line, int[] first) {
+    List<String[]> times = new ArrayList<String[]>();
+    Pattern glued = Pattern.compile("(\\d{1,2})\\s*[:：.]\\s*(\\d{1,2})\\s*(?:[-~到至—–]\\s*)?(\\d{1,2})\\s*[:：.]\\s*(\\d{2})");
+    Matcher matcher = glued.matcher(line);
+    while (matcher.find()) {
+      String minutes = matcher.group(2);
+      String startMin = minutes.length() == 1 ? minutes + "0" : minutes;
+      if (minutes.length() == 2 && minutes.charAt(0) == '0' && !hasDash(line, matcher.start(), matcher.end())) {
+        String start = normTime(matcher.group(1) + ":00");
+        String end = normTime(matcher.group(3) + ":" + matcher.group(4));
+        if (acceptClock(start, end, first, matcher.start())) times.add(new String[] {start, end});
+        continue;
+      }
+      String start = normTime(matcher.group(1) + ":" + startMin);
+      String end = normTime(matcher.group(3) + ":" + matcher.group(4));
+      if (acceptClock(start, end, first, matcher.start())) times.add(new String[] {start, end});
+    }
+    return times;
+  }
+
+  private static boolean hasDash(String line, int from, int to) {
+    for (int i = from; i < to && i < line.length(); i++) {
+      char c = line.charAt(i);
+      if (c == '-' || c == '~' || c == '—' || c == '–' || c == '到' || c == '至') return true;
+    }
+    return false;
+  }
+
+  private static boolean acceptClock(String start, String end, int[] first, int at) {
+    if (start.length() == 0 || end.length() == 0) return false;
+    if (parseMinutes(start) >= parseMinutes(end)) return false;
+    if (first[0] < 0) first[0] = at;
+    return true;
   }
 
   private static void flushPeriod(List<int[]> spans, List<List<String[]>> columns, String pending, List<String[]> times) {
