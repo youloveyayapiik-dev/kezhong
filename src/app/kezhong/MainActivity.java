@@ -309,15 +309,13 @@ public class MainActivity extends Activity {
       note.setText(Model.formatMinutes(plan.wakeAt.get(Calendar.HOUR_OF_DAY) * 60 + plan.wakeAt.get(Calendar.MINUTE)) + " 起");
       card.addView(note);
     }
-    if (!plan.wakePassed && same) {
-      Button alarm = lightButton("写入闹钟");
-      alarm.setOnClickListener(new View.OnClickListener() {
-        public void onClick(View v) {
-          setAlarm(plan.wakeAt.get(Calendar.HOUR_OF_DAY), plan.wakeAt.get(Calendar.MINUTE), "起床 · " + plan.course.name);
-        }
-      });
-      card.addView(alarm);
-    }
+    Button alarm = lightButton(plan.wakePassed ? "仍写入系统闹钟" : "写入系统闹钟");
+    alarm.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) {
+        setAlarm(plan.wakeAt.get(Calendar.HOUR_OF_DAY), plan.wakeAt.get(Calendar.MINUTE), "起床 · " + plan.course.name);
+      }
+    });
+    card.addView(alarm);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(8);
     card.setLayoutParams(lp);
