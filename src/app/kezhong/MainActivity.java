@@ -316,6 +316,34 @@ public class MainActivity extends Activity {
       });
       card.addView(alarm);
     }
+    Slot later = classAfter(course, date);
+    if (later != null) {
+      View line = new View(this);
+      line.setBackgroundColor(0x33FFFFFF);
+      LinearLayout.LayoutParams rule = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+      rule.topMargin = dp(14);
+      rule.bottomMargin = dp(12);
+      card.addView(line, rule);
+      TextView laterKicker = text(12, 0xFFD5DDD6);
+      String laterDay;
+      if (Model.sameDay(later.date, date)) laterDay = "下一节";
+      else if (Model.daysBetween(date, later.date) == 1) laterDay = "明天";
+      else laterDay = Model.WEEKDAY[Model.isoWeekday(later.date)];
+      laterKicker.setText(laterDay);
+      TextView laterTime = text(20, CREAM);
+      laterTime.setTypeface(Typeface.SERIF);
+      laterTime.setText(span(later.course));
+      TextView laterName = text(16, CREAM);
+      laterName.setText(later.course.name);
+      card.addView(laterKicker);
+      card.addView(laterTime);
+      card.addView(laterName);
+      if (later.course.location.length() > 0) {
+        TextView laterPlace = text(14, 0xFFD5DDD6);
+        laterPlace.setText(later.course.location);
+        card.addView(laterPlace);
+      }
+    }
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(8);
     card.setLayoutParams(lp);
@@ -334,6 +362,8 @@ public class MainActivity extends Activity {
       }
       rest.add(course);
     }
+    if (rest.isEmpty()) return;
+    rest.remove(0);
     if (rest.isEmpty()) return;
     TextView heading = text(15, INK);
     heading.setText("今天还剩");
@@ -1064,6 +1094,25 @@ public class MainActivity extends Activity {
           bestAt = at;
           best = new Slot();
           best.date = date;
+          best.course = course;
+        }
+      }
+    }
+    return best;
+  }
+
+  private Slot classAfter(Model.Course shown, Calendar date) {
+    long after = stamp(date, shown.start);
+    Slot best = null;
+    long bestAt = Long.MAX_VALUE;
+    for (Model.Course course : store.courses) {
+      for (Calendar when : Model.classDates(course, store.settings)) {
+        long at = stamp(when, course.start);
+        if (at <= after) continue;
+        if (at < bestAt) {
+          bestAt = at;
+          best = new Slot();
+          best.date = when;
           best.course = course;
         }
       }
