@@ -249,7 +249,10 @@ public class MainActivity extends Activity {
       col.addView(cardText("这个学期还没有下一节课。", "先在「课程」里添加，或到「设置」导入课表。"));
     } else {
       col.addView(wakeCard(plan, now));
-      addLater(col, plan, now);
+      Slot next = firstCatchable(now);
+      Model.Course shown = next != null ? next.course : plan.course;
+      Calendar shownDate = next != null ? next.date : plan.classDate;
+      addLater(col, shown, shownDate, now);
     }
     if (plan == null || !Model.sameDay(plan.classDate, now)) {
       TextView quiet = text(14, MUTED);
@@ -267,71 +270,110 @@ public class MainActivity extends Activity {
   }
 
   private View wakeCard(final Model.WakePlan plan, Calendar now) {
+    Slot next = firstCatchable(now);
+    final Model.Course course = next != null ? next.course : plan.course;
+    final Calendar date = next != null ? next.date : plan.classDate;
+    boolean same = next != null && course == plan.course && Model.sameDay(date, plan.classDate);
+    boolean skipped = next != null && !same;
     LinearLayout card = vertical(PINE);
     round(card, 22);
-    pad(card, 18, 16, 18, 16);
+    pad(card, 20, 18, 20, 16);
     TextView kicker = text(13, 0xFFD5DDD6);
-    boolean today = Model.sameDay(plan.wakeAt, now);
-    boolean classToday = Model.sameDay(plan.classDate, now);
-    kicker.setText(plan.wakePassed ? "起床时间已经过了" : (today ? "今天早上" : "下次起床"));
-    TextView time = text(36, CREAM);
+    String day;
+    if (Model.sameDay(date, now)) day = skipped ? "下一节" : "今天";
+    else if (Model.daysBetween(now, date) == 1) day = "明天";
+    else day = Model.WEEKDAY[Model.isoWeekday(date)];
+    kicker.setText(day);
+    TextView time = text(32, CREAM);
     time.setTypeface(Typeface.SERIF);
-    time.setText(Model.formatMinutes(plan.wakeAt.get(Calendar.HOUR_OF_DAY) * 60 + plan.wakeAt.get(Calendar.MINUTE)));
-    TextView detail = text(14, CREAM);
-    String when = classToday ? "今天" : Model.WEEKDAY[Model.isoWeekday(plan.classDate)] + " " + Model.monthDay(plan.classDate);
-    String classOff = Holidays.off(plan.classDate);
-    if (classOff != null) when = when + " · " + classOff;
-    detail.setText(when + "  " + span(plan.course));
-    TextView name = text(16, CREAM);
+    time.setText(span(course));
+    TextView name = text(18, CREAM);
     name.setTypeface(Typeface.DEFAULT_BOLD);
-    name.setText(plan.course.name);
-    TextView place = text(15, CREAM);
-    place.setText(plan.course.location);
-    TextView catchLine = text(13, CREAM);
-    String missed = missLine(plan, now);
-    if (missed.length() > 0) {
-      kicker.setText(plan.course.start + " 赶不上了");
-      catchLine.setText(missed);
-    } else if (plan.wakePassed) {
-      kicker.setText("起床过了，现在出门还赶得上");
-    }
-    Button alarm = lightButton(plan.wakePassed ? "仍写入系统闹钟" : "写入系统闹钟");
-    alarm.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) {
-        setAlarm(plan.wakeAt.get(Calendar.HOUR_OF_DAY), plan.wakeAt.get(Calendar.MINUTE), "起床 · " + plan.course.name);
-      }
-    });
+    name.setText(course.name);
     card.addView(kicker);
     card.addView(time);
-    card.addView(detail);
     card.addView(name);
-    if (plan.course.location.length() > 0) card.addView(place);
-    if (catchLine.getText().length() > 0) card.addView(catchLine);
-    card.addView(alarm);
+    if (course.location.length() > 0) {
+      TextView place = text(16, CREAM);
+      place.setText(course.location);
+      card.addView(place);
+    }
+    if (skipped) {
+      TextView note = text(13, 0xFFD5DDD6);
+      note.setText(span(plan.course) + " 那节过了");
+      card.addView(note);
+    } else if (!plan.wakePassed && same) {
+      TextView note = text(13, 0xFFD5DDD6);
+      note.setText(Model.formatMinutes(plan.wakeAt.get(Calendar.HOUR_OF_DAY) * 60 + plan.wakeAt.get(Calendar.MINUTE)) + " 起");
+      card.addView(note);
+    }
+    if (!plan.wakePassed && same) {
+      Button alarm = lightButton("写入闹钟");
+      alarm.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          setAlarm(plan.wakeAt.get(Calendar.HOUR_OF_DAY), plan.wakeAt.get(Calendar.MINUTE), "起床 · " + plan.course.name);
+        }
+      });
+      card.addView(alarm);
+    }
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    lp.topMargin = dp(12);
+    lp.topMargin = dp(8);
     card.setLayoutParams(lp);
     return card;
   }
 
-  private void addLater(LinearLayout col, Model.WakePlan plan, Calendar now) {
-    List<Model.Course> day = Model.onDate(store.courses, store.settings, plan.classDate);
-    int skip = -1;
-    for (int i = 0; i < day.size(); i++) {
-      Model.Course course = day.get(i);
-      if (course == plan.course || (course.name.equals(plan.course.name) && course.start.equals(plan.course.start))) {
-        skip = i;
-        break;
+  private void addLater(LinearLayout col, Model.Course shown, Calendar date, Calendar now) {
+    if (!Model.sameDay(date, now)) return;
+    List<Model.Course> day = Model.onDate(store.courses, store.settings, date);
+    boolean after = false;
+    List<Model.Course> rest = new ArrayList<Model.Course>();
+    for (Model.Course course : day) {
+      if (!after) {
+        if (course == shown || (course.name.equals(shown.name) && course.start.equals(shown.start))) after = true;
+        continue;
       }
+      rest.add(course);
     }
-    if (skip < 0 || skip >= day.size() - 1) return;
-    if (!Model.sameDay(plan.classDate, now)) return;
+    if (rest.isEmpty()) return;
     TextView heading = text(15, INK);
     heading.setText("今天还剩");
     heading.setTypeface(Typeface.DEFAULT_BOLD);
     pad(heading, 4, 16, 4, 0);
     col.addView(heading);
-    for (int i = skip + 1; i < day.size(); i++) col.addView(courseCard(day.get(i), "", false));
+    for (Model.Course course : rest) col.addView(courseCard(course, "", false));
+  }
+
+  private void dropDuplicates() {
+    List<Model.Course> kept = new ArrayList<Model.Course>();
+    int removed = 0;
+    for (Model.Course course : store.courses) {
+      boolean dup = false;
+      for (Model.Course other : kept) {
+        if (sameCourse(other, course)) dup = true;
+      }
+      if (dup) removed++;
+      else kept.add(course);
+    }
+    if (removed == 0) {
+      toast("没有重复的课");
+      return;
+    }
+    store.courses.clear();
+    store.courses.addAll(kept);
+    store.sample = false;
+    store.save();
+    toast("去掉了 " + removed + " 节重复的课");
+    show(tab);
+  }
+
+  private boolean sameCourse(Model.Course a, Model.Course b) {
+    if (a.day != b.day) return false;
+    if (!a.name.trim().equals(b.name.trim())) return false;
+    if (!a.start.equals(b.start) || !a.end.equals(b.end)) return false;
+    String left = a.location == null ? "" : a.location.trim();
+    String right = b.location == null ? "" : b.location.trim();
+    if (left.length() > 0 && right.length() > 0 && !left.equals(right)) return false;
+    return a.weeks.label().equals(b.weeks.label());
   }
 
   private TextView bandLabel(String name) {
@@ -552,7 +594,7 @@ public class MainActivity extends Activity {
   private View pageCourses() {
     ScrollView scroll = new ScrollView(this);
     LinearLayout col = vertical(0);
-    pad(col, 16, 4, 16, 28);
+    pad(col, 16, 4, 16, 108);
     Button add = button("添加课程", true);
     add.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openEditor(null); }
@@ -564,6 +606,11 @@ public class MainActivity extends Activity {
         public void onClick(View v) { confirmClear(); }
       });
       col.addView(clear);
+      Button dup = button("去掉重复", false);
+      dup.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) { dropDuplicates(); }
+      });
+      col.addView(dup);
     }
     if (store.courses.isEmpty()) {
       TextView empty = text(14, MUTED);
@@ -627,6 +674,24 @@ public class MainActivity extends Activity {
     row.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     row.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openEditor(course); }
+    });
+    row.setOnLongClickListener(new View.OnLongClickListener() {
+      public boolean onLongClick(View v) {
+        new AlertDialog.Builder(MainActivity.this)
+            .setTitle("删除这节课")
+            .setMessage(course.name)
+            .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
+              public void onClick(android.content.DialogInterface dialog, int which) {
+                store.courses.remove(course);
+                store.sample = false;
+                store.save();
+                show(tab);
+              }
+            })
+            .setNegativeButton("取消", null)
+            .show();
+        return true;
+      }
     });
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(8);
