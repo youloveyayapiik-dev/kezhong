@@ -254,13 +254,7 @@ public class MainActivity extends Activity {
       Calendar shownDate = next != null ? next.date : plan.classDate;
       Slot later = classAfter(shown, shownDate);
       if (later != null) col.addView(nextCard(later, now));
-      addLater(col, shown, shownDate, now);
-    }
-    if (plan == null || !Model.sameDay(plan.classDate, now)) {
-      TextView quiet = text(14, MUTED);
-      quiet.setText("今天没课");
-      pad(quiet, 4, 14, 4, 0);
-      col.addView(quiet);
+      col.addView(restCard(shown, shownDate, later, now));
     }
     Button allCal = button("一键写入日历并提醒", false);
     allCal.setOnClickListener(new View.OnClickListener() {
@@ -323,31 +317,86 @@ public class MainActivity extends Activity {
   }
 
   private View nextCard(Slot later, Calendar now) {
-    LinearLayout card = vertical(CARD);
+    LinearLayout card = vertical(0xFFD7E8DE);
     round(card, 22);
-    stroke(card);
     pad(card, 20, 16, 20, 16);
     TextView kicker = text(13, PINE);
     kicker.setText("下一节");
     kicker.setTypeface(Typeface.DEFAULT_BOLD);
-    TextView time = text(22, INK);
+    TextView time = text(26, PINE);
     time.setTypeface(Typeface.SERIF);
     String day = "";
     if (!Model.sameDay(later.date, now)) {
       day = Model.daysBetween(now, later.date) == 1 ? "明天  " : Model.WEEKDAY[Model.isoWeekday(later.date)] + "  ";
     }
     time.setText(day + span(later.course));
-    TextView name = text(16, INK);
+    TextView name = text(17, INK);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setText(later.course.name);
     card.addView(kicker);
     card.addView(time);
     card.addView(name);
     if (later.course.location.length() > 0) {
-      TextView place = text(15, MUTED);
+      TextView place = text(15, 0xFF3E5248);
       place.setText(later.course.location);
       card.addView(place);
     }
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    lp.topMargin = dp(12);
+    card.setLayoutParams(lp);
+    return card;
+  }
+
+  private View restCard(Model.Course shown, Calendar shownDate, Slot later, Calendar now) {
+    List<Model.Course> rest = new ArrayList<Model.Course>();
+    for (Model.Course course : Model.onDate(store.courses, store.settings, now)) {
+      if (isShown(course, shown, shownDate, now)) continue;
+      if (later != null && isShown(course, later.course, later.date, now)) continue;
+      rest.add(course);
+    }
+    if (rest.isEmpty()) return greetCard(now, Model.sameDay(shownDate, now) || (later != null && Model.sameDay(later.date, now)));
+    LinearLayout card = vertical(CARD);
+    round(card, 22);
+    stroke(card);
+    pad(card, 18, 14, 18, 14);
+    TextView title = text(15, INK);
+    title.setText("今天还剩");
+    title.setTypeface(Typeface.DEFAULT_BOLD);
+    card.addView(title);
+    for (Model.Course course : rest) {
+      TextView line = text(15, INK);
+      String place = course.location.length() == 0 ? "" : "   " + course.location;
+      line.setText(span(course) + "   " + course.name + place);
+      pad(line, 0, 10, 0, 0);
+      card.addView(line);
+    }
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    lp.topMargin = dp(12);
+    card.setLayoutParams(lp);
+    return card;
+  }
+
+  private boolean isShown(Model.Course course, Model.Course shown, Calendar shownDate, Calendar now) {
+    if (shown == null || shownDate == null || !Model.sameDay(shownDate, now)) return false;
+    return course == shown || (course.name.equals(shown.name) && course.start.equals(shown.start));
+  }
+
+  private View greetCard(Calendar now, boolean hadClass) {
+    int hour = now.get(Calendar.HOUR_OF_DAY);
+    String hello = hour < 11 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
+    String off = Holidays.off(now);
+    if (off != null) hello = wish(off);
+    LinearLayout card = vertical(0xFFF7F1E6);
+    round(card, 22);
+    pad(card, 20, 16, 20, 16);
+    TextView title = text(18, INK);
+    title.setTypeface(Typeface.DEFAULT_BOLD);
+    title.setText(hello + "  " + face());
+    TextView sub = text(14, MUTED);
+    sub.setText(hadClass ? "今天的课到这里了" : "今天没课");
+    pad(sub, 0, 4, 0, 0);
+    card.addView(title);
+    card.addView(sub);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(12);
     card.setLayoutParams(lp);
@@ -2048,9 +2097,11 @@ public class MainActivity extends Activity {
     button.setMinHeight(0);
     button.setMinimumHeight(dp(40));
     GradientDrawable bg = new GradientDrawable();
-    bg.setCornerRadius(dp(12));
-    bg.setColor(CREAM);
+    bg.setCornerRadius(dp(14));
+    bg.setColor(0xFFFFFFFF);
     button.setBackground(bg);
+    button.setBackgroundTintList(null);
+    button.setStateListAnimator(null);
     button.setTextColor(PINE);
     button.setPadding(dp(8), dp(8), dp(8), dp(8));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
