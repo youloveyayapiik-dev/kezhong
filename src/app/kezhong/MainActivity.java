@@ -662,7 +662,7 @@ public class MainActivity extends Activity {
     int todayWeek = Model.clampWeek(store.settings, now);
     int gutter = dp(38);
     int headerH = dp(34);
-    int gridH = Math.max(dp(120), height - headerH);
+    int gridH = Math.max(dp(120), height - headerH - dp(10));
     int dayW = Math.max(dp(28), (width - gutter) / 7);
     int span = Math.max(60, endMin - startMin);
     int hourPx = Math.max(1, gridH * 60 / span);
@@ -764,24 +764,19 @@ public class MainActivity extends Activity {
     int end = Model.parseMinutes(course.end);
     int top = Math.max(0, (start - startMin) * hourPx / 60);
     int height = Math.max(dp(22), (end - start) * hourPx / 60 - dp(2));
-    int ink = courseInk(course.name);
-    boolean roomy = height >= dp(48);
     LinearLayout box = vertical(courseColor(course.name));
     round(box, 8);
     pad(box, 3, 2, 3, 2);
-    TextView time = text(roomy ? 10 : 8, ink);
-    time.setTypeface(Typeface.DEFAULT_BOLD);
-    time.setText(clockMinutes(start) + "\n" + clockMinutes(end));
-    TextView name = text(roomy ? 12 : 10, INK);
+    int nameLines = Math.max(1, (height - (course.location.length() > 0 ? dp(14) : dp(2))) / dp(13));
+    TextView name = text(11, INK);
     name.setTypeface(Typeface.DEFAULT_BOLD);
-    name.setMaxLines(height >= dp(36) ? 2 : 1);
+    name.setMaxLines(nameLines);
     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
     name.setText(course.name);
-    box.addView(time);
-    if (height >= dp(30)) box.addView(name);
-    if (height >= dp(64) && course.location.length() > 0) {
+    box.addView(name);
+    if (course.location.length() > 0 && height >= dp(32)) {
       TextView place = text(10, 0xFF5C675F);
-      place.setSingleLine(true);
+      place.setMaxLines(2);
       place.setEllipsize(android.text.TextUtils.TruncateAt.END);
       place.setText(course.location);
       box.addView(place);
