@@ -590,7 +590,7 @@ public class MainActivity extends Activity {
   private View pageWeek(final Calendar now) {
     LinearLayout col = vertical(0);
     TextView label = text(16, INK);
-    label.setText("第 " + week + " 周");
+    label.setText("第 " + week + " 周  ·  点周次直接跳");
     label.setTypeface(Typeface.DEFAULT_BOLD);
     pad(label, 16, 8, 16, 4);
     col.addView(label);
@@ -628,77 +628,34 @@ public class MainActivity extends Activity {
       pad(note, 16, 0, 16, 8);
       col.addView(note);
     }
-    int earliest = 24 * 60;
-    int latest = 0;
-    for (Model.Course course : store.courses) {
-      if (!course.weeks.on(week)) continue;
-      earliest = Math.min(earliest, Model.parseMinutes(course.start));
-      latest = Math.max(latest, Model.parseMinutes(course.end));
-    }
-    int startMin = earliest == 24 * 60 ? 8 * 60 : (earliest / 60) * 60;
-    int endMin = latest == 0 ? 18 * 60 : ((latest + 59) / 60) * 60;
-    if (endMin - startMin < 6 * 60) endMin = startMin + 6 * 60;
-    final int hourPx = dp(52);
-    final int gutter = dp(34);
-    final int spanMin = endMin - startMin;
-    final int gridH = spanMin * hourPx / 60;
-    LinearLayout head = horizontal();
-    head.setGravity(Gravity.CENTER_VERTICAL);
-    head.addView(new View(this), new LinearLayout.LayoutParams(gutter, dp(40)));
+    HorizontalScrollView scroll = new HorizontalScrollView(this);
+    LinearLayout days = horizontal();
+    pad(days, 12, 4, 12, 20);
     Calendar monday = Model.addDays(Model.parseDate(store.settings.termStart), (week - 1) * 7);
     for (int d = 1; d <= 7; d++) {
       Calendar date = Model.addDays(monday, d - 1);
-      boolean isToday = week == todayWeek && Model.sameDay(date, now);
+      boolean isToday = Model.sameDay(date, now);
       String off = Holidays.off(date);
-      LinearLayout cell = vertical(0);
-      cell.setGravity(Gravity.CENTER_HORIZONTAL);
-      TextView dayName = text(12, isToday ? PINE : MUTED);
-      dayName.setText(Model.WEEKDAY[d].substring(1));
-      dayName.setGravity(Gravity.CENTER);
-      LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-      nameLp.gravity = Gravity.CENTER_HORIZONTAL;
-      TextView dayNum = text(11, isToday ? CREAM : (off != null ? 0xFF9A3412 : MUTED));
-      dayNum.setText(String.valueOf(date.get(Calendar.DAY_OF_MONTH)));
-      dayNum.setGravity(Gravity.CENTER);
-      dayNum.setIncludeFontPadding(false);
-      LinearLayout.LayoutParams numLp = new LinearLayout.LayoutParams(isToday ? dp(20) : ViewGroup.LayoutParams.WRAP_CONTENT, isToday ? dp(20) : ViewGroup.LayoutParams.WRAP_CONTENT);
-      numLp.gravity = Gravity.CENTER_HORIZONTAL;
-      if (isToday) {
-        GradientDrawable dot = new GradientDrawable();
-        dot.setShape(GradientDrawable.OVAL);
-        dot.setColor(PINE);
-        dayNum.setBackground(dot);
+      int columnColor = isToday ? 0xFFE4EFE6 : (off != null ? 0xFFF8E8E0 : 0xFFFFFCF7);
+      LinearLayout column = vertical(columnColor);
+      round(column, 20);
+      if (column.getBackground() instanceof GradientDrawable) {
+        ((GradientDrawable) column.getBackground()).setStroke(dp(1), isToday ? 0xFFC5D5CC : 0xFFE4DDD2);
       }
-      cell.addView(dayName, nameLp);
-      cell.addView(dayNum, numLp);
-      head.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-    }
-    col.addView(head);
-    final ScrollView board = new ScrollView(this);
-    board.setVerticalScrollBarEnabled(false);
-    FrameLayout canvas = new FrameLayout(this);
-    int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-    boolean showNow = week == todayWeek && nowMin >= startMin && nowMin <= endMin;
-    for (int min = startMin; min <= endMin; min += 60) {
-      int y = (min - startMin) * hourPx / 60;
-      View line = new View(this);
-      line.setBackgroundColor(0xFFE6E1D8);
-      FrameLayout.LayoutParams lineLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-      lineLp.topMargin = y;
-      lineLp.leftMargin = gutter;
-      canvas.addView(line, lineLp);
-      if (showNow && Math.abs(min - nowMin) < 28) continue;
-      TextView tick = text(10, MUTED);
-      tick.setText(Model.formatMinutes(min));
-      FrameLayout.LayoutParams tickLp = new FrameLayout.LayoutParams(gutter, ViewGroup.LayoutParams.WRAP_CONTENT);
-      tickLp.topMargin = Math.max(0, y - dp(7));
-      canvas.addView(tick, tickLp);
-    }
-    LinearLayout columns = horizontal();
-    FrameLayout.LayoutParams columnsLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
-    columnsLp.leftMargin = gutter;
-    for (int d = 1; d <= 7; d++) {
-      FrameLayout column = new FrameLayout(this);
+      pad(column, 10, 10, 10, 10);
+      TextView head = text(13, isToday ? PINE : MUTED);
+      head.setText(Model.WEEKDAY[d] + "  " + Model.monthDay(date));
+      head.setTypeface(Typeface.DEFAULT_BOLD);
+      column.addView(head);
+      if (off != null) {
+        TextView tag = text(11, 0xFF9A3412);
+        tag.setText(off);
+        column.addView(tag);
+      } else if (Holidays.work(date) != null) {
+        TextView tag = text(11, MUTED);
+        tag.setText("调休上班");
+        column.addView(tag);
+      }
       List<Model.Course> list = new ArrayList<Model.Course>();
       for (Model.Course course : store.courses) {
         if (course.day == d && course.weeks.on(week)) list.add(course);
@@ -708,121 +665,45 @@ public class MainActivity extends Activity {
           return Model.parseMinutes(a.start) - Model.parseMinutes(b.start);
         }
       });
-      for (Model.Course course : list) column.addView(gridCourse(course, startMin, hourPx));
-      columns.addView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+      if (list.isEmpty()) {
+        TextView empty = text(12, MUTED);
+        empty.setText("没课");
+        column.addView(empty);
+      }
+      int lastBand = -1;
+      for (final Model.Course course : list) {
+        int band = Model.band(course.start);
+        if (band != lastBand) {
+          TextView mark = text(11, PINE);
+          mark.setText(Model.BAND[band]);
+          mark.setTypeface(Typeface.DEFAULT_BOLD);
+          pad(mark, 2, 8, 2, 0);
+          column.addView(mark);
+          lastBand = band;
+        }
+        column.addView(miniCourse(course, date));
+      }
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(168), ViewGroup.LayoutParams.WRAP_CONTENT);
+      lp.rightMargin = dp(8);
+      days.addView(column, lp);
     }
-    canvas.addView(columns, columnsLp);
-    if (showNow) {
-      int y = (nowMin - startMin) * hourPx / 60;
-      View nowLine = new View(this);
-      nowLine.setBackgroundColor(0xFFE11D2E);
-      FrameLayout.LayoutParams nowLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2));
-      nowLp.topMargin = y;
-      nowLp.leftMargin = dp(40);
-      canvas.addView(nowLine, nowLp);
-      TextView nowLabel = text(10, 0xFFFFFFFF);
-      nowLabel.setText(Model.formatMinutes(nowMin));
-      nowLabel.setTypeface(Typeface.DEFAULT_BOLD);
-      nowLabel.setGravity(Gravity.CENTER);
-      GradientDrawable badge = new GradientDrawable();
-      badge.setColor(0xFFE11D2E);
-      badge.setCornerRadius(dp(6));
-      nowLabel.setBackground(badge);
-      nowLabel.setPadding(dp(4), dp(1), dp(4), dp(1));
-      FrameLayout.LayoutParams labelLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-      labelLp.topMargin = Math.max(0, y - dp(8));
-      labelLp.leftMargin = dp(2);
-      canvas.addView(nowLabel, labelLp);
-    }
-    canvas.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH));
-    board.addView(canvas);
-    col.addView(board, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-    final int focus = week == todayWeek
-        ? (now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE) - startMin) * hourPx / 60
-        : 0;
-    board.post(new Runnable() {
-      public void run() { board.scrollTo(0, Math.max(0, focus - dp(48))); }
-    });
+    scroll.addView(days);
+    col.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     return col;
   }
 
-  private View gridCourse(final Model.Course course, int startMin, int hourPx) {
-    int start = Model.parseMinutes(course.start);
-    int end = Model.parseMinutes(course.end);
-    int top = Math.max(0, (start - startMin) * hourPx / 60);
-    int height = Math.max(dp(28), (end - start) * hourPx / 60 - dp(2));
+  private View miniCourse(final Model.Course course, final Calendar date) {
     int ink = courseInk(course.name);
-    LinearLayout box = horizontal();
-    box.setBackgroundColor(courseColor(course.name));
-    round(box, 8);
-    View accent = new View(this);
-    accent.setBackgroundColor(ink);
-    box.addView(accent, new LinearLayout.LayoutParams(dp(3), ViewGroup.LayoutParams.MATCH_PARENT));
-    LinearLayout words = vertical(0);
-    pad(words, 3, 2, 2, 2);
-    TextView time = text(8, ink);
+    LinearLayout box = vertical(courseColor(course.name));
+    round(box, 14);
+    pad(box, 10, 8, 10, 8);
+    TextView time = text(12, ink);
     time.setTypeface(Typeface.DEFAULT_BOLD);
     time.setText(span(course));
-    time.setMaxLines(2);
-    words.addView(time);
-    if (height >= dp(36)) {
-      TextView name = text(10, INK);
-      name.setTypeface(Typeface.DEFAULT_BOLD);
-      name.setMaxLines(2);
-      name.setText(course.name);
-      words.addView(name);
-    }
-    if (height >= dp(56) && course.location.length() > 0) {
-      TextView place = text(8, MUTED);
-      place.setMaxLines(1);
-      place.setText(course.location);
-      words.addView(place);
-    }
-    box.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-    box.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { openEditor(course); }
-    });
-    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
-    lp.topMargin = top + dp(1);
-    lp.leftMargin = dp(1);
-    lp.rightMargin = dp(2);
-    box.setLayoutParams(lp);
-    return box;
-  }
-
-  private int courseColor(String name) {
-    int[] colors = {
-      0xFFD7E8DE, 0xFFF6D9C8, 0xFFD6E4F5, 0xFFF6D5D8,
-      0xFFE6D8F3, 0xFFF8E7B2, 0xFFD4EFE8, 0xFFE8E0D4
-    };
-    int hash = 0;
-    if (name != null) {
-      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
-    }
-    return colors[(hash & 0x7fffffff) % colors.length];
-  }
-
-  private int courseInk(String name) {
-    int[] colors = {
-      0xFF2F6B52, 0xFF8A5A32, 0xFF2E5580, 0xFF8A4450,
-      0xFF5C4580, 0xFF8A6A20, 0xFF1F6B5C, 0xFF5C5146
-    };
-    int hash = 0;
-    if (name != null) {
-      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
-    }
-    return colors[(hash & 0x7fffffff) % colors.length];
-  }
-
-  private View miniCourse(final Model.Course course, final Calendar date) {
-    LinearLayout box = vertical(TONES[Model.tone(course.name)]);
-    round(box, 12);
-    pad(box, 8, 8, 8, 8);
-    TextView time = text(11, MUTED);
-    time.setText(span(course));
-    TextView name = text(14, INK);
+    TextView name = text(15, INK);
+    name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setText(course.name);
-    TextView place = text(11, MUTED);
+    TextView place = text(12, 0xFF5C675F);
     place.setText(course.location);
     box.addView(time);
     box.addView(name);
@@ -834,6 +715,30 @@ public class MainActivity extends Activity {
     lp.topMargin = dp(8);
     box.setLayoutParams(lp);
     return box;
+  }
+
+  private int courseColor(String name) {
+    int[] colors = {
+      0xFFD5E8DC, 0xFFF4DCC8, 0xFFD7E3F4, 0xFFF6D5D8,
+      0xFFE4D7F2, 0xFFF6E7B8, 0xFFCDE8E2, 0xFFE8DDD0
+    };
+    int hash = 0;
+    if (name != null) {
+      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
+    }
+    return colors[(hash & 0x7fffffff) % colors.length];
+  }
+
+  private int courseInk(String name) {
+    int[] colors = {
+      0xFF1F6B4A, 0xFF8A4E28, 0xFF2A4E86, 0xFF8A3E4A,
+      0xFF5A3E86, 0xFF7A5E10, 0xFF1A6A5C, 0xFF5A4E42
+    };
+    int hash = 0;
+    if (name != null) {
+      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
+    }
+    return colors[(hash & 0x7fffffff) % colors.length];
   }
 
   private View pageCourses() {
