@@ -655,18 +655,22 @@ public class MainActivity extends Activity {
       TextView dayName = text(12, isToday ? CREAM : MUTED);
       dayName.setText(Model.WEEKDAY[d].substring(1));
       dayName.setGravity(Gravity.CENTER);
+      dayName.setIncludeFontPadding(false);
+      LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(isToday ? dp(22) : ViewGroup.LayoutParams.WRAP_CONTENT, isToday ? dp(22) : ViewGroup.LayoutParams.WRAP_CONTENT);
+      nameLp.gravity = Gravity.CENTER_HORIZONTAL;
       if (isToday) {
         GradientDrawable dot = new GradientDrawable();
         dot.setShape(GradientDrawable.OVAL);
         dot.setColor(PINE);
         dayName.setBackground(dot);
-        dayName.setPadding(dp(6), dp(2), dp(6), dp(2));
       }
       TextView dayNum = text(11, off != null ? 0xFF9A3412 : (isToday ? PINE : MUTED));
       dayNum.setText(String.valueOf(date.get(Calendar.DAY_OF_MONTH)));
       dayNum.setGravity(Gravity.CENTER);
-      cell.addView(dayName);
-      cell.addView(dayNum);
+      LinearLayout.LayoutParams numLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+      numLp.gravity = Gravity.CENTER_HORIZONTAL;
+      cell.addView(dayName, nameLp);
+      cell.addView(dayNum, numLp);
       head.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     }
     col.addView(head);
@@ -674,6 +678,8 @@ public class MainActivity extends Activity {
     board.setVerticalScrollBarEnabled(false);
     FrameLayout canvas = new FrameLayout(this);
     canvas.setBackgroundColor(CARD);
+    int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+    boolean showNow = week == todayWeek && nowMin >= startMin && nowMin <= endMin;
     for (int min = startMin; min <= endMin; min += 60) {
       int y = (min - startMin) * hourPx / 60;
       View line = new View(this);
@@ -682,6 +688,7 @@ public class MainActivity extends Activity {
       lineLp.topMargin = y;
       lineLp.leftMargin = gutter;
       canvas.addView(line, lineLp);
+      if (showNow && Math.abs(min - nowMin) < 28) continue;
       TextView tick = text(10, MUTED);
       tick.setText(Model.formatMinutes(min));
       FrameLayout.LayoutParams tickLp = new FrameLayout.LayoutParams(gutter, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -716,23 +723,27 @@ public class MainActivity extends Activity {
       columns.addView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
     }
     canvas.addView(columns, columnsLp);
-    if (week == todayWeek) {
-      int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-      if (nowMin >= startMin && nowMin <= endMin) {
-        int y = (nowMin - startMin) * hourPx / 60;
-        View nowLine = new View(this);
-        nowLine.setBackgroundColor(0xFFE11D2E);
-        FrameLayout.LayoutParams nowLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2));
-        nowLp.topMargin = y;
-        nowLp.leftMargin = gutter - dp(4);
-        canvas.addView(nowLine, nowLp);
-        TextView nowLabel = text(10, 0xFFE11D2E);
-        nowLabel.setText(Model.formatMinutes(nowMin));
-        nowLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        FrameLayout.LayoutParams labelLp = new FrameLayout.LayoutParams(gutter, ViewGroup.LayoutParams.WRAP_CONTENT);
-        labelLp.topMargin = Math.max(0, y - dp(14));
-        canvas.addView(nowLabel, labelLp);
-      }
+    if (showNow) {
+      int y = (nowMin - startMin) * hourPx / 60;
+      View nowLine = new View(this);
+      nowLine.setBackgroundColor(0xFFE11D2E);
+      FrameLayout.LayoutParams nowLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2));
+      nowLp.topMargin = y;
+      nowLp.leftMargin = dp(40);
+      canvas.addView(nowLine, nowLp);
+      TextView nowLabel = text(10, 0xFFFFFFFF);
+      nowLabel.setText(Model.formatMinutes(nowMin));
+      nowLabel.setTypeface(Typeface.DEFAULT_BOLD);
+      nowLabel.setGravity(Gravity.CENTER);
+      GradientDrawable badge = new GradientDrawable();
+      badge.setColor(0xFFE11D2E);
+      badge.setCornerRadius(dp(6));
+      nowLabel.setBackground(badge);
+      nowLabel.setPadding(dp(4), dp(1), dp(4), dp(1));
+      FrameLayout.LayoutParams labelLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+      labelLp.topMargin = Math.max(0, y - dp(8));
+      labelLp.leftMargin = dp(2);
+      canvas.addView(nowLabel, labelLp);
     }
     canvas.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH));
     board.addView(canvas);
@@ -751,15 +762,15 @@ public class MainActivity extends Activity {
     int end = Model.parseMinutes(course.end);
     int top = Math.max(0, (start - startMin) * hourPx / 60);
     int height = Math.max(dp(28), (end - start) * hourPx / 60 - dp(2));
-    LinearLayout box = vertical(0xFF1E4A73);
+    LinearLayout box = vertical(courseColor(course.name));
     round(box, 6);
     pad(box, 3, 2, 3, 2);
-    TextView name = text(10, CREAM);
+    TextView name = text(10, INK);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setText(course.name.length() > 4 ? course.name.substring(0, 4) : course.name);
     box.addView(name);
     if (height >= dp(40) && course.location.length() > 0) {
-      TextView place = text(9, 0xFFD5E2F0);
+      TextView place = text(9, MUTED);
       place.setText(course.location.length() > 6 ? course.location.substring(0, 6) : course.location);
       box.addView(place);
     }
@@ -772,6 +783,18 @@ public class MainActivity extends Activity {
     lp.rightMargin = dp(2);
     box.setLayoutParams(lp);
     return box;
+  }
+
+  private int courseColor(String name) {
+    int[] colors = {
+      0xFFD7E8DE, 0xFFF6D9C8, 0xFFD6E4F5, 0xFFF6D5D8,
+      0xFFE6D8F3, 0xFFF8E7B2, 0xFFD4EFE8, 0xFFE8E0D4
+    };
+    int hash = 0;
+    if (name != null) {
+      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
+    }
+    return colors[(hash & 0x7fffffff) % colors.length];
   }
 
   private View miniCourse(final Model.Course course, final Calendar date) {
