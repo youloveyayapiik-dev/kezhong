@@ -294,22 +294,21 @@ public class MainActivity extends Activity {
       place.setText(course.location);
       card.addView(place);
     }
-    if (skipped) {
+    final Calendar ring = alarmMoment(course, date, now);
+    if (ring != null) {
+      final int hour = ring.get(Calendar.HOUR_OF_DAY);
+      final int minute = ring.get(Calendar.MINUTE);
       TextView note = text(13, 0xFFD5DDD6);
-      note.setText(span(plan.course) + " 那节过了");
+      note.setText(Model.formatMinutes(hour * 60 + minute) + " 响");
       card.addView(note);
-    } else if (!plan.wakePassed && same) {
-      TextView note = text(13, 0xFFD5DDD6);
-      note.setText(Model.formatMinutes(plan.wakeAt.get(Calendar.HOUR_OF_DAY) * 60 + plan.wakeAt.get(Calendar.MINUTE)) + " 起");
-      card.addView(note);
+      Button alarm = lightButton("写入系统闹钟");
+      alarm.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          setAlarm(hour, minute, course.name);
+        }
+      });
+      card.addView(alarm);
     }
-    Button alarm = lightButton(plan.wakePassed ? "仍写入系统闹钟" : "写入系统闹钟");
-    alarm.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) {
-        setAlarm(plan.wakeAt.get(Calendar.HOUR_OF_DAY), plan.wakeAt.get(Calendar.MINUTE), "起床 · " + plan.course.name);
-      }
-    });
-    card.addView(alarm);
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(8);
     card.setLayoutParams(lp);
@@ -1990,7 +1989,40 @@ public class MainActivity extends Activity {
     return button;
   }
 
+  private Calendar alarmMoment(Model.Course course, Calendar date, Calendar now) {
+    int start = Model.parseMinutes(course.start);
+    int[] leads = new int[] {store.settings.wake.lead(), store.settings.wake.remind, 0};
+    for (int i = 0; i < leads.length; i++) {
+      Calendar at = (Calendar) date.clone();
+      at.set(Calendar.SECOND, 0);
+      at.set(Calendar.MILLISECOND, 0);
+      at.set(Calendar.HOUR_OF_DAY, 0);
+      at.set(Calendar.MINUTE, 0);
+      at.add(Calendar.MINUTE, start - Math.max(0, leads[i]));
+      if (at.getTimeInMillis() > now.getTimeInMillis()) return at;
+    }
+    return null;
+  }
+
   private void setAlarm(int hour, int minute, String message) {
+    int state = enableExisting(hour, minute);
+    if (state == 1) {
+      toast("这个时间已经有闹钟了");
+      return;
+    }
+    if (state == 2) {
+      toast("已打开原来的闹钟");
+      return;
+    }
+    if (state == 3) {
+      toast("这个时间已经有闹钟，去时钟里打开");
+      try {
+        startActivity(new Intent(AlarmClock.ACTION_SHOW_ALARMS));
+      } catch (Exception e) {
+        toast("这台手机没有可用的系统时钟");
+      }
+      return;
+    }
     try {
       Intent intent = new Intent(AlarmClock.ACTION_SET_ALARM);
       intent.putExtra(AlarmClock.EXTRA_HOUR, hour);
@@ -2001,6 +2033,72 @@ public class MainActivity extends Activity {
     } catch (Exception e) {
       toast("这台手机没有可用的系统时钟");
     }
+  }
+
+  private int enableExisting(int hour, int minute) {
+    String[] urls = new String[] {
+      "content://com.android.deskclock/alarms",
+      "content://com.google.android.deskclock/alarms",
+      "content://com.android.deskclock/alarm",
+      "content://com.google.android.deskclock/alarm",
+      "content://com.coloros.alarmclock/alarm",
+      "content://com.oplus.alarmclock/alarm",
+      "content://com.oppo.alarmclock/alarm",
+      "content://com.miui.clock/alarm",
+      "content://com.android.BBKClock/alarm",
+      "content://com.huawei.deskclock/alarm",
+      "content://com.sec.android.app.clockpackage/alarm"
+    };
+    for (String url : urls) {
+      Cursor cursor = null;
+      try {
+        cursor = getContentResolver().query(Uri.parse(url), null, null, null, null);
+        if (cursor == null) continue;
+        int hourCol = firstCol(cursor, "hour", "alarm_hour");
+        int minCol = firstCol(cursor, "minutes", "minute", "alarm_minutes");
+        int onCol = firstCol(cursor, "enabled", "alarm_enabled", "enable");
+        int idCol = cursor.getColumnIndex("_id");
+        if (hourCol < 0 || minCol < 0) {
+          cursor.close();
+          continue;
+        }
+        long turnOn = -1;
+        String onName = onCol < 0 ? null : cursor.getColumnName(onCol);
+        while (cursor.moveToNext()) {
+          if (cursor.getInt(hourCol) != hour || cursor.getInt(minCol) != minute) continue;
+          if (onCol < 0 || cursor.getInt(onCol) != 0) {
+            cursor.close();
+            return 1;
+          }
+          if (turnOn < 0 && idCol >= 0) turnOn = cursor.getLong(idCol);
+        }
+        cursor.close();
+        cursor = null;
+        if (turnOn >= 0) {
+          if (onName == null) return 3;
+          ContentValues values = new ContentValues();
+          values.put(onName, 1);
+          int updated = getContentResolver().update(Uri.parse(url), values, "_id=?", new String[] {String.valueOf(turnOn)});
+          return updated > 0 ? 2 : 3;
+        }
+      } catch (Exception ignored) {
+        if (cursor != null) cursor.close();
+      }
+    }
+    return 0;
+  }
+
+  private int firstCol(Cursor cursor, String a, String b, String c) {
+    int i = cursor.getColumnIndex(a);
+    if (i >= 0) return i;
+    i = cursor.getColumnIndex(b);
+    if (i >= 0) return i;
+    return cursor.getColumnIndex(c);
+  }
+
+  private int firstCol(Cursor cursor, String a, String b) {
+    int i = cursor.getColumnIndex(a);
+    return i >= 0 ? i : cursor.getColumnIndex(b);
   }
 
   private void share(String filename, String content, String mime) {
