@@ -23,6 +23,8 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.Gravity;
 import android.view.animation.DecelerateInterpolator;
 import android.view.View;
@@ -640,32 +642,33 @@ public class MainActivity extends Activity {
     if (end <= startMin) end = startMin + 6 * 60;
     final int endMin = end;
     final Calendar stamp = (Calendar) now.clone();
-    final FrameLayout host = new FrameLayout(this);
-    col.addView(host, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-    host.post(new Runnable() {
+    final ZoomPane pane = new ZoomPane();
+    col.addView(pane, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+    pane.post(new Runnable() {
       int tries;
       public void run() {
-        int w = host.getWidth();
-        int h = host.getHeight();
-        if ((w < 10 || h < 10) && tries++ < 6) {
-          host.post(this);
+        if (pane.getWidth() < 10 && tries++ < 6) {
+          pane.post(this);
           return;
         }
-        host.removeAllViews();
-        host.addView(weekGrid(stamp, startMin, endMin, Math.max(w, 10), Math.max(h, 10)));
+        int nowMin = stamp.get(Calendar.HOUR_OF_DAY) * 60 + stamp.get(Calendar.MINUTE);
+        View board = weekGrid(stamp, startMin, endMin);
+        int focus = 0;
+        if (nowMin >= startMin && nowMin <= endMin) focus = (nowMin - startMin) * dp(58) / 60;
+        pane.show(board, focus);
       }
     });
     return col;
   }
 
-  private View weekGrid(Calendar now, int startMin, int endMin, int width, int height) {
+  private View weekGrid(Calendar now, int startMin, int endMin) {
     int todayWeek = Model.clampWeek(store.settings, now);
-    int gutter = dp(38);
-    int headerH = dp(34);
-    int gridH = Math.max(dp(120), height - headerH - dp(10));
-    int dayW = Math.max(dp(28), (width - gutter) / 7);
+    int gutter = dp(42);
+    int headerH = dp(36);
+    int dayW = dp(96);
+    int hourPx = dp(58);
     int span = Math.max(60, endMin - startMin);
-    int hourPx = Math.max(1, gridH * 60 / span);
+    int gridH = span * hourPx / 60;
     int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
     boolean showNow = week == todayWeek && nowMin >= startMin && nowMin <= endMin;
     int step = hourPx < dp(20) ? 120 : 60;
@@ -756,6 +759,7 @@ public class MainActivity extends Activity {
     }
     right.addView(canvas, new LinearLayout.LayoutParams(dayW * 7, gridH));
     board.addView(right);
+    board.setLayoutParams(new FrameLayout.LayoutParams(gutter + dayW * 7, headerH + gridH));
     return board;
   }
 
@@ -767,17 +771,15 @@ public class MainActivity extends Activity {
     LinearLayout box = vertical(courseColor(course.name));
     round(box, 8);
     pad(box, 3, 2, 3, 2);
-    int nameLines = Math.max(1, (height - (course.location.length() > 0 ? dp(14) : dp(2))) / dp(13));
-    TextView name = text(11, INK);
+    int nameLines = Math.max(2, (height - dp(16)) / dp(16));
+    TextView name = text(13, INK);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setMaxLines(nameLines);
-    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
     name.setText(course.name);
     box.addView(name);
-    if (course.location.length() > 0 && height >= dp(32)) {
-      TextView place = text(10, 0xFF5C675F);
+    if (course.location.length() > 0) {
+      TextView place = text(11, 0xFF5C675F);
       place.setMaxLines(2);
-      place.setEllipsize(android.text.TextUtils.TruncateAt.END);
       place.setText(course.location);
       box.addView(place);
     }
@@ -2543,5 +2545,133 @@ public class MainActivity extends Activity {
 
   private void toast(String message) {
     Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+  }
+
+  private final class ZoomPane extends FrameLayout {
+    private float scale = 1f;
+    private float tx;
+    private float ty;
+    private float lastX;
+    private float lastY;
+    private boolean dragged;
+    private boolean pinched;
+    private final ScaleGestureDetector scaler;
+
+    ZoomPane() {
+      super(MainActivity.this);
+      setClipChildren(true);
+      scaler = new ScaleGestureDetector(MainActivity.this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        public boolean onScale(ScaleGestureDetector detector) {
+          pinched = true;
+          float next = Math.max(0.6f, Math.min(2.4f, scale * detector.getScaleFactor()));
+          if (next == scale) return true;
+          float focusX = detector.getFocusX();
+          float focusY = detector.getFocusY();
+          tx = focusX - (focusX - tx) * (next / scale);
+          ty = focusY - (focusY - ty) * (next / scale);
+          scale = next;
+          clamp();
+          apply();
+          return true;
+        }
+      });
+    }
+
+    void show(View board, int focusY) {
+      removeAllViews();
+      FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) board.getLayoutParams();
+      addView(board, lp);
+      final int contentW = lp.width;
+      final int contentH = lp.height;
+      post(new Runnable() {
+        public void run() {
+          float five = dp(42) + dp(96) * 5f;
+          scale = getWidth() / five;
+          if (scale < 0.6f) scale = 0.6f;
+          if (scale > 1.4f) scale = 1.4f;
+          tx = 0f;
+          ty = getHeight() * 0.28f - (dp(36) + focusY) * scale;
+          clamp();
+          apply();
+        }
+      });
+    }
+
+    private void apply() {
+      View child = getChildCount() == 0 ? null : getChildAt(0);
+      if (child == null) return;
+      child.setPivotX(0f);
+      child.setPivotY(0f);
+      child.setScaleX(scale);
+      child.setScaleY(scale);
+      child.setTranslationX(tx);
+      child.setTranslationY(ty);
+    }
+
+    private void clamp() {
+      View child = getChildCount() == 0 ? null : getChildAt(0);
+      if (child == null || !(child.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+      FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) child.getLayoutParams();
+      float cw = lp.width * scale;
+      float ch = lp.height * scale;
+      if (cw <= getWidth()) tx = (getWidth() - cw) / 2f;
+      else tx = Math.min(0f, Math.max(getWidth() - cw, tx));
+      if (ch <= getHeight()) ty = 0f;
+      else ty = Math.min(0f, Math.max(getHeight() - ch, ty));
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+      return true;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+      scaler.onTouchEvent(event);
+      if (event.getPointerCount() > 1) return true;
+      switch (event.getActionMasked()) {
+        case MotionEvent.ACTION_DOWN:
+          lastX = event.getX();
+          lastY = event.getY();
+          dragged = false;
+          pinched = false;
+          return true;
+        case MotionEvent.ACTION_MOVE:
+          if (scaler.isInProgress()) return true;
+          float dx = event.getX() - lastX;
+          float dy = event.getY() - lastY;
+          if (Math.abs(dx) + Math.abs(dy) > dp(3)) dragged = true;
+          tx += dx;
+          ty += dy;
+          lastX = event.getX();
+          lastY = event.getY();
+          clamp();
+          apply();
+          return true;
+        case MotionEvent.ACTION_UP:
+          if (!dragged && !pinched) tap(event.getX(), event.getY());
+          return true;
+        default:
+          return true;
+      }
+    }
+
+    private void tap(float x, float y) {
+      View child = getChildCount() == 0 ? null : getChildAt(0);
+      if (child == null) return;
+      float localX = (x - tx) / scale;
+      float localY = (y - ty) / scale;
+      long time = eventTime();
+      MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, localX, localY, 0);
+      MotionEvent up = MotionEvent.obtain(time, time, MotionEvent.ACTION_UP, localX, localY, 0);
+      child.dispatchTouchEvent(down);
+      child.dispatchTouchEvent(up);
+      down.recycle();
+      up.recycle();
+    }
+
+    private long eventTime() {
+      return android.os.SystemClock.uptimeMillis();
+    }
   }
 }
