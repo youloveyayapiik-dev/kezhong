@@ -768,10 +768,16 @@ public class MainActivity extends Activity {
     int end = Model.parseMinutes(course.end);
     int top = Math.max(0, (start - startMin) * hourPx / 60);
     int height = Math.max(dp(22), (end - start) * hourPx / 60 - dp(2));
+    int ink = courseInk(course.name);
     LinearLayout box = vertical(courseColor(course.name));
     round(box, 8);
-    pad(box, 3, 2, 3, 2);
-    int nameLines = Math.max(2, (height - dp(16)) / dp(16));
+    pad(box, 4, 3, 4, 3);
+    TextView time = text(11, ink);
+    time.setTypeface(Typeface.DEFAULT_BOLD);
+    time.setSingleLine(true);
+    time.setText(span(course));
+    box.addView(time);
+    int nameLines = Math.max(1, (height - dp(32)) / dp(16));
     TextView name = text(13, INK);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setMaxLines(nameLines);
