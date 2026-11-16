@@ -71,6 +71,7 @@ public class MainActivity extends Activity {
   private List<Model.Course> pending = new ArrayList<Model.Course>();
   private List<String> pendingWarnings = new ArrayList<String>();
   private List<Model.Course> calendarQueue;
+  private boolean calendarClear;
   private String pendingNote = "把表格粘进来，或从文件选择 xls、xlsx、csv。";
 
   @Override
@@ -261,6 +262,11 @@ public class MainActivity extends Activity {
       public void onClick(View v) { askCalendar(new ArrayList<Model.Course>(store.courses)); }
     });
     col.addView(allCal);
+    Button clearCal = button("清掉日历里的课", false);
+    clearCal.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { confirmClearCalendar(); }
+    });
+    col.addView(clearCal);
     scroll.addView(col);
     return scroll;
   }
@@ -340,6 +346,37 @@ public class MainActivity extends Activity {
       place.setText(later.course.location);
       card.addView(place);
     }
+    final Calendar ring = alarmMoment(later.course, later.date, now);
+    if (ring != null) {
+      final int hour = ring.get(Calendar.HOUR_OF_DAY);
+      final int minute = ring.get(Calendar.MINUTE);
+      final TextView toggle = text(14, PINE);
+      toggle.setText("提前设闹钟");
+      toggle.setTypeface(Typeface.DEFAULT_BOLD);
+      pad(toggle, 0, 12, 0, 0);
+      final LinearLayout panel = vertical(0);
+      panel.setVisibility(View.GONE);
+      TextView when = text(14, 0xFF3E5248);
+      when.setText(Model.formatMinutes(hour * 60 + minute) + " 响");
+      pad(when, 0, 6, 0, 0);
+      Button alarm = button("写入系统闹钟", true);
+      alarm.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          setAlarm(hour, minute, later.course.name);
+        }
+      });
+      panel.addView(when);
+      panel.addView(alarm);
+      toggle.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          boolean open = panel.getVisibility() != View.VISIBLE;
+          panel.setVisibility(open ? View.VISIBLE : View.GONE);
+          toggle.setText(open ? "收起" : "提前设闹钟");
+        }
+      });
+      card.addView(toggle);
+      card.addView(panel);
+    }
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(12);
     card.setLayoutParams(lp);
@@ -359,13 +396,15 @@ public class MainActivity extends Activity {
     stroke(card);
     pad(card, 18, 14, 18, 14);
     TextView title = text(15, INK);
-    title.setText("今天还剩");
+    title.setText("今天的课");
     title.setTypeface(Typeface.DEFAULT_BOLD);
     card.addView(title);
+    int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
     for (Model.Course course : rest) {
-      TextView line = text(15, INK);
+      boolean over = Model.parseMinutes(course.end) <= nowMin;
+      TextView line = text(15, over ? MUTED : INK);
       String place = course.location.length() == 0 ? "" : "   " + course.location;
-      line.setText(span(course) + "   " + course.name + place);
+      line.setText(span(course) + "   " + course.name + place + (over ? "   已上" : ""));
       pad(line, 0, 10, 0, 0);
       card.addView(line);
     }
@@ -1827,6 +1866,78 @@ public class MainActivity extends Activity {
     return sb.toString();
   }
 
+  private void confirmClearCalendar() {
+    if (store.courses.isEmpty()) {
+      toast("课表是空的，没有要清的日历");
+      return;
+    }
+    new AlertDialog.Builder(this)
+        .setTitle("清掉日历里的课")
+        .setMessage("只删和课表同名的日程，包括重复写入的。其他事情不动。")
+        .setPositiveButton("清掉", new android.content.DialogInterface.OnClickListener() {
+          public void onClick(android.content.DialogInterface dialog, int which) {
+            calendarClear = true;
+            if (checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+              finishClearCalendar();
+            } else {
+              requestPermissions(new String[] {Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR}, REQ_CALENDAR);
+            }
+          }
+        })
+        .setNegativeButton("取消", null)
+        .show();
+  }
+
+  private void finishClearCalendar() {
+    calendarClear = false;
+    int removed = clearCourseEvents();
+    if (removed < 0) toast("没找到可写的系统日历");
+    else if (removed == 0) toast("日历里没有这些课");
+    else toast("已从日历清掉 " + removed + " 节");
+  }
+
+  private int clearCourseEvents() {
+    List<Long> calendars = new ArrayList<Long>();
+    Cursor cursor = null;
+    try {
+      cursor = getContentResolver().query(
+          Calendars.CONTENT_URI,
+          new String[] {Calendars._ID, Calendars.CALENDAR_ACCESS_LEVEL},
+          Calendars.VISIBLE + "=1",
+          null,
+          null);
+      if (cursor == null) return -1;
+      while (cursor.moveToNext()) {
+        if (cursor.getInt(1) >= Calendars.CAL_ACCESS_CONTRIBUTOR) calendars.add(Long.valueOf(cursor.getLong(0)));
+      }
+    } catch (Exception e) {
+      return -1;
+    } finally {
+      if (cursor != null) cursor.close();
+    }
+    if (calendars.isEmpty()) return -1;
+    List<String> titles = new ArrayList<String>();
+    for (Model.Course course : store.courses) {
+      String name = course.name == null ? "" : course.name.trim();
+      if (name.length() == 0 || titles.contains(name)) continue;
+      titles.add(name);
+    }
+    int removed = 0;
+    for (Long calId : calendars) {
+      for (String title : titles) {
+        try {
+          removed += getContentResolver().delete(
+              Events.CONTENT_URI,
+              Events.CALENDAR_ID + "=? AND " + Events.TITLE + "=?",
+              new String[] {String.valueOf(calId.longValue()), title});
+        } catch (Exception ignored) {
+        }
+      }
+    }
+    return removed;
+  }
+
   private void askCalendar(List<Model.Course> courses) {
     if (courses == null || courses.isEmpty()) {
       toast("还没有课可以写入");
@@ -1848,8 +1959,13 @@ public class MainActivity extends Activity {
     boolean ok = grantResults.length >= 2
         && grantResults[0] == PackageManager.PERMISSION_GRANTED
         && grantResults[1] == PackageManager.PERMISSION_GRANTED;
-    if (ok) finishCalendar();
-    else toast("没有日历权限，写不进去");
+    if (!ok) {
+      calendarClear = false;
+      toast("没有日历权限");
+      return;
+    }
+    if (calendarClear) finishClearCalendar();
+    else finishCalendar();
   }
 
   private void finishCalendar() {
