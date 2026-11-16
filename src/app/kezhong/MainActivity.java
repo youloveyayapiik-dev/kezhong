@@ -9,9 +9,12 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.AlarmClock;
 import android.provider.CalendarContract;
@@ -1915,10 +1918,15 @@ public class MainActivity extends Activity {
 
   private View glassBackdrop() {
     FrameLayout box = new FrameLayout(this);
-    GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {0xFFE4F0FB, 0xFFF7F4EE, 0xFFD7E6F6});
+    GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {0xFFC9DFF6, 0xFFF6E7D6, 0xFFD5EDE4});
     box.setBackground(wash);
-    box.addView(orb(0xCCFFFFFF, dp(260), dp(-30), dp(20)));
-    box.addView(orb(0x66B9D4F5, dp(220), dp(180), dp(420)));
+    box.addView(orb(0xFF7EB6F2, dp(340), dp(-80), dp(-20)));
+    box.addView(orb(0xFFF3B48A, dp(280), dp(160), dp(180)));
+    box.addView(orb(0xFF8ED4C0, dp(300), dp(-60), dp(460)));
+    box.addView(orb(0xFFC9B6F0, dp(240), dp(140), dp(700)));
+    if (Build.VERSION.SDK_INT >= 31) {
+      box.setRenderEffect(RenderEffect.createBlurEffect(46f, 46f, Shader.TileMode.CLAMP));
+    }
     return box;
   }
 
@@ -1939,15 +1947,40 @@ public class MainActivity extends Activity {
   }
 
   private int frost(int color) {
-    int r = (color >> 16) & 0xFF;
-    int g = (color >> 8) & 0xFF;
-    int b = color & 0xFF;
+    return glassPlateColor(color);
+  }
+
+  private int glassPlateColor(int tint) {
+    int r = (tint >> 16) & 0xFF;
+    int g = (tint >> 8) & 0xFF;
+    int b = tint & 0xFF;
     int lum = (r * 3 + g * 6 + b) / 10;
-    if (lum < 90) return (0xE6 << 24) | (color & 0x00FFFFFF);
-    r = (r + 255) / 2;
-    g = (g + 255) / 2;
-    b = (b + 255) / 2;
-    return (0xC8 << 24) | (r << 16) | (g << 8) | b;
+    if (lum < 110) return (0xA6 << 24) | (tint & 0x00FFFFFF);
+    int rr = (r + 255 * 2) / 3;
+    int gg = (g + 255 * 2) / 3;
+    int bb = (b + 255 * 2) / 3;
+    return (0x73 << 24) | (rr << 16) | (gg << 8) | bb;
+  }
+
+  private GradientDrawable glassPlate(int radius, int tint) {
+    int r = (tint >> 16) & 0xFF;
+    int g = (tint >> 8) & 0xFF;
+    int b = tint & 0xFF;
+    int lum = (r * 3 + g * 6 + b) / 10;
+    GradientDrawable bg = new GradientDrawable();
+    bg.setCornerRadius(dp(radius));
+    bg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+    if (lum < 110) {
+      int hi = (0xD4 << 24) | (((r + 255) / 2) << 16) | (((g + 255) / 2) << 8) | ((b + 255) / 2);
+      int lo = (0x8C << 24) | (r << 16) | (g << 8) | b;
+      bg.setColors(new int[] {hi, lo});
+    } else {
+      int mid = (0x78 << 24) | (((r + 255) / 2) << 16) | (((g + 255) / 2) << 8) | ((b + 255) / 2);
+      int lo = (0x55 << 24) | (((r * 2 + 255) / 3) << 16) | (((g * 2 + 255) / 3) << 8) | ((b * 2 + 255) / 3);
+      bg.setColors(new int[] {0xEEFFFFFF, mid, lo});
+    }
+    bg.setStroke(Math.max(1, dp(1)), 0xF7FFFFFF);
+    return bg;
   }
 
   private void openSettings() {
@@ -2397,7 +2430,7 @@ public class MainActivity extends Activity {
   private LinearLayout nav() {
     LinearLayout bar = horizontal();
     bar.setGravity(Gravity.CENTER_VERTICAL);
-    bar.setBackgroundColor(glass() ? 0xB8FFFFFF : CARD);
+    bar.setBackgroundColor(glass() ? 0xFFFFFFFF : CARD);
     round(bar, 28);
     if (glass() && bar.getBackground() instanceof GradientDrawable) {
       ((GradientDrawable) bar.getBackground()).setStroke(Math.max(1, dp(1)), 0xEEFFFFFF);
@@ -2472,10 +2505,14 @@ public class MainActivity extends Activity {
     button.setTextSize(14);
     button.setMinHeight(0);
     button.setMinimumHeight(dp(40));
-    GradientDrawable bg = new GradientDrawable();
-    bg.setCornerRadius(dp(14));
-    bg.setColor(0xFFFFFFFF);
-    button.setBackground(bg);
+    if (glass()) {
+      button.setBackground(glassPlate(16, 0xFFFFFFFF));
+    } else {
+      GradientDrawable bg = new GradientDrawable();
+      bg.setCornerRadius(dp(14));
+      bg.setColor(0xFFFFFFFF);
+      button.setBackground(bg);
+    }
     button.setBackgroundTintList(null);
     button.setStateListAnimator(null);
     button.setTextColor(PINE);
@@ -2499,11 +2536,15 @@ public class MainActivity extends Activity {
   }
 
   private void styleButton(Button button, boolean filled) {
-    GradientDrawable bg = new GradientDrawable();
-    bg.setCornerRadius(dp(12));
-    bg.setColor(filled ? PINE : (glass() ? 0x99FFFFFF : 0x00000000));
-    if (!filled) bg.setStroke(Math.max(1, dp(1)), glass() ? 0xCCFFFFFF : LINE);
-    button.setBackground(bg);
+    if (glass() && !filled) {
+      button.setBackground(glassPlate(16, 0xFFFFFFFF));
+    } else {
+      GradientDrawable bg = new GradientDrawable();
+      bg.setCornerRadius(dp(12));
+      bg.setColor(filled ? PINE : 0x00000000);
+      if (!filled) bg.setStroke(dp(1), LINE);
+      button.setBackground(bg);
+    }
     button.setTextColor(filled ? CREAM : INK);
     button.setPadding(dp(8), dp(6), dp(8), dp(6));
     button.setMinHeight(0);
@@ -2531,17 +2572,17 @@ public class MainActivity extends Activity {
   }
 
   private void round(View view, int radius) {
+    int color = CARD;
+    if (view.getBackground() instanceof android.graphics.drawable.ColorDrawable) {
+      color = ((android.graphics.drawable.ColorDrawable) view.getBackground()).getColor();
+    }
+    if (glass()) {
+      view.setBackground(glassPlate(radius, color));
+      return;
+    }
     GradientDrawable bg = new GradientDrawable();
     bg.setCornerRadius(dp(radius));
-    if (view.getBackground() instanceof android.graphics.drawable.ColorDrawable) {
-      bg.setColor(((android.graphics.drawable.ColorDrawable) view.getBackground()).getColor());
-    } else {
-      bg.setColor(CARD);
-    }
-    if (glass() && bg.getColor() != null) {
-      bg.setColor(frost(bg.getColor().getDefaultColor()));
-      bg.setStroke(Math.max(1, dp(1)), 0xCCFFFFFF);
-    }
+    bg.setColor(color);
     view.setBackground(bg);
   }
 
