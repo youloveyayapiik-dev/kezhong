@@ -638,7 +638,7 @@ public class MainActivity extends Activity {
     int startMin = earliest == 24 * 60 ? 8 * 60 : (earliest / 60) * 60;
     int endMin = latest == 0 ? 18 * 60 : ((latest + 59) / 60) * 60;
     if (endMin - startMin < 6 * 60) endMin = startMin + 6 * 60;
-    final int hourPx = dp(44);
+    final int hourPx = dp(52);
     final int gutter = dp(34);
     final int spanMin = endMin - startMin;
     final int gridH = spanMin * hourPx / 60;
@@ -652,23 +652,23 @@ public class MainActivity extends Activity {
       String off = Holidays.off(date);
       LinearLayout cell = vertical(0);
       cell.setGravity(Gravity.CENTER_HORIZONTAL);
-      TextView dayName = text(12, isToday ? CREAM : MUTED);
+      TextView dayName = text(12, isToday ? PINE : MUTED);
       dayName.setText(Model.WEEKDAY[d].substring(1));
       dayName.setGravity(Gravity.CENTER);
-      dayName.setIncludeFontPadding(false);
-      LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(isToday ? dp(22) : ViewGroup.LayoutParams.WRAP_CONTENT, isToday ? dp(22) : ViewGroup.LayoutParams.WRAP_CONTENT);
+      LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
       nameLp.gravity = Gravity.CENTER_HORIZONTAL;
+      TextView dayNum = text(11, isToday ? CREAM : (off != null ? 0xFF9A3412 : MUTED));
+      dayNum.setText(String.valueOf(date.get(Calendar.DAY_OF_MONTH)));
+      dayNum.setGravity(Gravity.CENTER);
+      dayNum.setIncludeFontPadding(false);
+      LinearLayout.LayoutParams numLp = new LinearLayout.LayoutParams(isToday ? dp(20) : ViewGroup.LayoutParams.WRAP_CONTENT, isToday ? dp(20) : ViewGroup.LayoutParams.WRAP_CONTENT);
+      numLp.gravity = Gravity.CENTER_HORIZONTAL;
       if (isToday) {
         GradientDrawable dot = new GradientDrawable();
         dot.setShape(GradientDrawable.OVAL);
         dot.setColor(PINE);
-        dayName.setBackground(dot);
+        dayNum.setBackground(dot);
       }
-      TextView dayNum = text(11, off != null ? 0xFF9A3412 : (isToday ? PINE : MUTED));
-      dayNum.setText(String.valueOf(date.get(Calendar.DAY_OF_MONTH)));
-      dayNum.setGravity(Gravity.CENTER);
-      LinearLayout.LayoutParams numLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-      numLp.gravity = Gravity.CENTER_HORIZONTAL;
       cell.addView(dayName, nameLp);
       cell.addView(dayNum, numLp);
       head.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -677,13 +677,12 @@ public class MainActivity extends Activity {
     final ScrollView board = new ScrollView(this);
     board.setVerticalScrollBarEnabled(false);
     FrameLayout canvas = new FrameLayout(this);
-    canvas.setBackgroundColor(CARD);
     int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
     boolean showNow = week == todayWeek && nowMin >= startMin && nowMin <= endMin;
     for (int min = startMin; min <= endMin; min += 60) {
       int y = (min - startMin) * hourPx / 60;
       View line = new View(this);
-      line.setBackgroundColor(LINE);
+      line.setBackgroundColor(0xFFE6E1D8);
       FrameLayout.LayoutParams lineLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
       lineLp.topMargin = y;
       lineLp.leftMargin = gutter;
@@ -699,10 +698,7 @@ public class MainActivity extends Activity {
     FrameLayout.LayoutParams columnsLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, gridH);
     columnsLp.leftMargin = gutter;
     for (int d = 1; d <= 7; d++) {
-      Calendar date = Model.addDays(monday, d - 1);
-      boolean isToday = week == todayWeek && Model.sameDay(date, now);
       FrameLayout column = new FrameLayout(this);
-      if (isToday) column.setBackgroundColor(0xFFE7EFEA);
       List<Model.Course> list = new ArrayList<Model.Course>();
       for (Model.Course course : store.courses) {
         if (course.day == d && course.weeks.on(week)) list.add(course);
@@ -713,13 +709,6 @@ public class MainActivity extends Activity {
         }
       });
       for (Model.Course course : list) column.addView(gridCourse(course, startMin, hourPx));
-      if (d < 7) {
-        View rule = new View(this);
-        rule.setBackgroundColor(LINE);
-        FrameLayout.LayoutParams ruleLp = new FrameLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT);
-        ruleLp.gravity = Gravity.END;
-        column.addView(rule, ruleLp);
-      }
       columns.addView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
     }
     canvas.addView(columns, columnsLp);
@@ -762,18 +751,34 @@ public class MainActivity extends Activity {
     int end = Model.parseMinutes(course.end);
     int top = Math.max(0, (start - startMin) * hourPx / 60);
     int height = Math.max(dp(28), (end - start) * hourPx / 60 - dp(2));
-    LinearLayout box = vertical(courseColor(course.name));
-    round(box, 6);
-    pad(box, 3, 2, 3, 2);
-    TextView name = text(10, INK);
-    name.setTypeface(Typeface.DEFAULT_BOLD);
-    name.setText(course.name.length() > 4 ? course.name.substring(0, 4) : course.name);
-    box.addView(name);
-    if (height >= dp(40) && course.location.length() > 0) {
-      TextView place = text(9, MUTED);
-      place.setText(course.location.length() > 6 ? course.location.substring(0, 6) : course.location);
-      box.addView(place);
+    int ink = courseInk(course.name);
+    LinearLayout box = horizontal();
+    box.setBackgroundColor(courseColor(course.name));
+    round(box, 8);
+    View accent = new View(this);
+    accent.setBackgroundColor(ink);
+    box.addView(accent, new LinearLayout.LayoutParams(dp(3), ViewGroup.LayoutParams.MATCH_PARENT));
+    LinearLayout words = vertical(0);
+    pad(words, 3, 2, 2, 2);
+    TextView time = text(8, ink);
+    time.setTypeface(Typeface.DEFAULT_BOLD);
+    time.setText(span(course));
+    time.setMaxLines(2);
+    words.addView(time);
+    if (height >= dp(36)) {
+      TextView name = text(10, INK);
+      name.setTypeface(Typeface.DEFAULT_BOLD);
+      name.setMaxLines(2);
+      name.setText(course.name);
+      words.addView(name);
     }
+    if (height >= dp(56) && course.location.length() > 0) {
+      TextView place = text(8, MUTED);
+      place.setMaxLines(1);
+      place.setText(course.location);
+      words.addView(place);
+    }
+    box.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     box.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openEditor(course); }
     });
@@ -789,6 +794,18 @@ public class MainActivity extends Activity {
     int[] colors = {
       0xFFD7E8DE, 0xFFF6D9C8, 0xFFD6E4F5, 0xFFF6D5D8,
       0xFFE6D8F3, 0xFFF8E7B2, 0xFFD4EFE8, 0xFFE8E0D4
+    };
+    int hash = 0;
+    if (name != null) {
+      for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
+    }
+    return colors[(hash & 0x7fffffff) % colors.length];
+  }
+
+  private int courseInk(String name) {
+    int[] colors = {
+      0xFF2F6B52, 0xFF8A5A32, 0xFF2E5580, 0xFF8A4450,
+      0xFF5C4580, 0xFF8A6A20, 0xFF1F6B5C, 0xFF5C5146
     };
     int hash = 0;
     if (name != null) {
@@ -2344,9 +2361,8 @@ public class MainActivity extends Activity {
   private LinearLayout nav() {
     LinearLayout bar = horizontal();
     bar.setGravity(Gravity.CENTER_VERTICAL);
-    bar.setBackgroundColor(0xFFF7F4EE);
+    bar.setBackgroundColor(CARD);
     round(bar, 28);
-    stroke(bar);
     pad(bar, 4, 4, 4, 4);
     String[] labels = {"主页", "周课", "课程", "设置"};
     for (int i = 0; i < labels.length; i++) {
