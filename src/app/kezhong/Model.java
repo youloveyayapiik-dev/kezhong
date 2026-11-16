@@ -203,6 +203,7 @@ public final class Model {
     public Wake wake = new Wake();
     public List<Period> periods = defaultPeriods();
     public String motion = "slide";
+    public String style = "glass";
   }
 
   public static final class WakePlan {

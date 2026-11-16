@@ -80,7 +80,13 @@ public class MainActivity extends Activity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     store = new Store(this);
-    LinearLayout root = vertical(PAPER);
+    buildUi();
+  }
+
+  private void buildUi() {
+    FrameLayout stage = new FrameLayout(this);
+    if (glass()) stage.addView(glassBackdrop(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    LinearLayout root = vertical(glass() ? 0 : PAPER);
     root.addView(header());
     subtitle = text(13, MUTED);
     pad(subtitle, 20, 0, 20, 8);
@@ -94,8 +100,9 @@ public class MainActivity extends Activity {
     nav = nav();
     dock.addView(nav);
     root.addView(dock);
-    setContentView(root);
-    show(0);
+    stage.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    setContentView(stage);
+    show(tab);
   }
 
   @Override
@@ -135,47 +142,8 @@ public class MainActivity extends Activity {
   }
 
   private void animatePage(final View page, final View leaving, int direction) {
-    String motion = store.settings.motion == null ? "slide" : store.settings.motion;
-    final int w = Math.max(body.getWidth(), 1);
-    final int h = Math.max(body.getHeight(), 1);
-    float distance = 8000f * getResources().getDisplayMetrics().density;
-    page.setAlpha(0f);
-    if ("fade".equals(motion)) {
-      page.animate().alpha(1f).setDuration(280).setInterpolator(new DecelerateInterpolator()).start();
-      leaving.animate().alpha(0f).setDuration(220).withEndAction(new Runnable() {
-        public void run() { drop(leaving); }
-      }).start();
-      return;
-    }
-    if ("turn".equals(motion)) {
-      page.setCameraDistance(distance);
-      leaving.setCameraDistance(distance);
-      page.setPivotX(w / 2f);
-      page.setPivotY(h / 2f);
-      leaving.setPivotX(w / 2f);
-      leaving.setPivotY(h / 2f);
-      page.setRotationY(direction * 75f);
-      page.animate().rotationY(0f).alpha(1f).setDuration(360).setInterpolator(new DecelerateInterpolator()).start();
-      leaving.animate().rotationY(-direction * 75f).alpha(0f).setDuration(320).withEndAction(new Runnable() {
-        public void run() { drop(leaving); }
-      }).start();
-      return;
-    }
-    if ("flip".equals(motion)) {
-      page.setCameraDistance(distance);
-      leaving.setCameraDistance(distance);
-      page.setPivotX(direction > 0 ? 0 : w);
-      page.setPivotY(h / 2f);
-      leaving.setPivotX(direction > 0 ? w : 0);
-      leaving.setPivotY(h / 2f);
-      page.setRotationY(direction > 0 ? 88f : -88f);
-      page.animate().rotationY(0f).alpha(1f).setDuration(380).setInterpolator(new DecelerateInterpolator()).start();
-      leaving.animate().rotationY(direction > 0 ? -88f : 88f).alpha(0f).setDuration(320).withEndAction(new Runnable() {
-        public void run() { drop(leaving); }
-      }).start();
-      return;
-    }
     final int dx = dp(36) * direction;
+    page.setAlpha(0f);
     page.setTranslationX(dx);
     page.animate().translationX(0).alpha(1f).setDuration(260).setInterpolator(new DecelerateInterpolator()).start();
     leaving.animate().translationX(-dx).alpha(0f).setDuration(200).setInterpolator(new DecelerateInterpolator()).withEndAction(new Runnable() {
@@ -203,9 +171,9 @@ public class MainActivity extends Activity {
       public void onClick(View v) { openSettings(); }
     });
     row.addView(gear, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    Button motion = button("翻页", false);
+    Button motion = button("风格", false);
     motion.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { openMotion(); }
+      public void onClick(View v) { openStyle(); }
     });
     row.addView(motion, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     return row;
@@ -1853,85 +1821,133 @@ public class MainActivity extends Activity {
     show(3);
   }
 
-  private void openMotion() {
-    final String[] keys = {"slide", "fade", "turn", "flip"};
-    final String[] names = {"经典", "淡入淡出", "转盘", "翻页"};
-    final int[] picked = new int[] {0};
-    String current = store.settings.motion == null ? "slide" : store.settings.motion;
-    for (int i = 0; i < keys.length; i++) if (keys[i].equals(current)) picked[0] = i;
+  private void openStyle() {
+    final String[] keys = {"glass", "plain"};
+    final String[] names = {"柔光玻璃", "普通"};
+    final int[] picked = new int[] {"plain".equals(store.settings.style) ? 1 : 0};
     LinearLayout wrap = vertical(0);
     pad(wrap, 16, 8, 16, 4);
-    TextView title = text(16, INK);
-    title.setText("翻页效果");
-    pad(title, 4, 0, 4, 12);
+    TextView title = text(18, INK);
+    title.setText("界面风格");
+    title.setGravity(Gravity.CENTER);
+    title.setTypeface(Typeface.DEFAULT_BOLD);
+    pad(title, 4, 0, 4, 14);
     wrap.addView(title);
     final LinearLayout row = horizontal();
-    final LinearLayout[] boxes = new LinearLayout[4];
-    for (int i = 0; i < 4; i++) {
+    final LinearLayout[] boxes = new LinearLayout[2];
+    for (int i = 0; i < 2; i++) {
       final int index = i;
       LinearLayout item = vertical(0);
       item.setGravity(Gravity.CENTER_HORIZONTAL);
       FrameLayout card = new FrameLayout(this);
-      card.addView(motionPage(keys[i]));
-      pad(card, 8, 10, 8, 10);
-      item.addView(card, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(96)));
-      TextView label = text(14, MUTED);
+      card.addView(stylePreview(i == 0), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+      item.addView(card, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(132)));
+      TextView label = text(15, MUTED);
       label.setText(names[i]);
       label.setGravity(Gravity.CENTER);
-      pad(label, 0, 8, 0, 0);
+      pad(label, 0, 10, 0, 0);
       item.addView(label);
       item.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) {
           picked[0] = index;
-          for (int n = 0; n < boxes.length; n++) paintMotion(boxes[n], n == index);
+          for (int n = 0; n < boxes.length; n++) paintStyle(boxes[n], n == index);
         }
       });
       LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-      if (i > 0) lp.leftMargin = dp(8);
+      if (i > 0) lp.leftMargin = dp(12);
       boxes[i] = item;
       row.addView(item, lp);
     }
-    for (int i = 0; i < boxes.length; i++) paintMotion(boxes[i], i == picked[0]);
+    for (int i = 0; i < boxes.length; i++) paintStyle(boxes[i], i == picked[0]);
     wrap.addView(row);
     new AlertDialog.Builder(this)
         .setView(wrap)
         .setPositiveButton("完成", new android.content.DialogInterface.OnClickListener() {
           public void onClick(android.content.DialogInterface dialog, int which) {
-            store.settings.motion = keys[picked[0]];
+            store.settings.style = keys[picked[0]];
             store.save();
+            buildUi();
           }
         })
         .show();
   }
 
-  private void paintMotion(LinearLayout item, boolean on) {
+  private void paintStyle(LinearLayout item, boolean on) {
     FrameLayout card = (FrameLayout) item.getChildAt(0);
-    GradientDrawable bg = new GradientDrawable();
-    bg.setCornerRadius(dp(18));
-    bg.setColor(0xFFF7F4EE);
-    bg.setStroke(dp(on ? 3 : 1), on ? 0xFF2563EB : LINE);
-    card.setBackground(bg);
+    GradientDrawable ring = new GradientDrawable();
+    ring.setCornerRadius(dp(26));
+    ring.setColor(0x00000000);
+    ring.setStroke(dp(on ? 3 : 0), on ? 0xFF2F6BFF : 0x00000000);
+    card.setBackground(ring);
+    card.setPadding(dp(on ? 3 : 0), dp(on ? 3 : 0), dp(on ? 3 : 0), dp(on ? 3 : 0));
     TextView label = (TextView) item.getChildAt(1);
-    label.setTextColor(on ? 0xFF2563EB : MUTED);
+    label.setTextColor(on ? 0xFF2F6BFF : INK);
     label.setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
   }
 
-  private View motionPage(String kind) {
-    View page = new View(this);
-    GradientDrawable paper = new GradientDrawable();
-    paper.setCornerRadius(dp(8));
-    paper.setColor(0xFFD9D3C7);
-    page.setBackground(paper);
-    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(36), dp(52), Gravity.CENTER);
-    page.setLayoutParams(lp);
-    if ("fade".equals(kind)) page.setAlpha(0.4f);
-    if ("turn".equals(kind)) page.setRotation(16f);
-    if ("flip".equals(kind)) {
-      page.setPivotX(0f);
-      page.setRotationY(55f);
-      page.setCameraDistance(8000f * getResources().getDisplayMetrics().density);
+  private View stylePreview(boolean glass) {
+    FrameLayout card = new FrameLayout(this);
+    GradientDrawable sky = new GradientDrawable(GradientDrawable.Orientation.TL_BR, glass
+        ? new int[] {0xFFD5E6F8, 0xFFF4F8FC, 0xFFB9D4F2}
+        : new int[] {0xFFF6F1E6, 0xFFEFE8DA, 0xFFE4DCCE});
+    sky.setCornerRadius(dp(22));
+    card.setBackground(sky);
+    View pill = new View(this);
+    GradientDrawable glassPill = new GradientDrawable();
+    glassPill.setCornerRadius(dp(18));
+    if (glass) {
+      glassPill.setColors(new int[] {0xE6FFFFFF, 0x66D7E8F8, 0x99FFFFFF});
+      glassPill.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
+      glassPill.setStroke(Math.max(1, dp(1)), 0xEEFFFFFF);
+    } else {
+      glassPill.setColor(0xFFF7F3EA);
+      glassPill.setStroke(Math.max(1, dp(1)), 0xFFE4DDD0);
     }
-    return page;
+    pill.setBackground(glassPill);
+    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(96), dp(30), Gravity.CENTER);
+    card.addView(pill, lp);
+    return card;
+  }
+
+  private boolean glass() {
+    return store == null || store.settings == null || !"plain".equals(store.settings.style);
+  }
+
+  private View glassBackdrop() {
+    FrameLayout box = new FrameLayout(this);
+    GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {0xFFE4F0FB, 0xFFF7F4EE, 0xFFD7E6F6});
+    box.setBackground(wash);
+    box.addView(orb(0xCCFFFFFF, dp(260), dp(-30), dp(20)));
+    box.addView(orb(0x66B9D4F5, dp(220), dp(180), dp(420)));
+    return box;
+  }
+
+  private View orb(int color, int size, int left, int top) {
+    View view = new View(this);
+    GradientDrawable light = new GradientDrawable();
+    light.setShape(GradientDrawable.OVAL);
+    light.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+    light.setGradientRadius(size / 2f);
+    int edge = color & 0x00FFFFFF;
+    light.setColors(new int[] {color, edge});
+    view.setBackground(light);
+    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+    lp.leftMargin = left;
+    lp.topMargin = top;
+    view.setLayoutParams(lp);
+    return view;
+  }
+
+  private int frost(int color) {
+    int r = (color >> 16) & 0xFF;
+    int g = (color >> 8) & 0xFF;
+    int b = color & 0xFF;
+    int lum = (r * 3 + g * 6 + b) / 10;
+    if (lum < 90) return (0xE6 << 24) | (color & 0x00FFFFFF);
+    r = (r + 255) / 2;
+    g = (g + 255) / 2;
+    b = (b + 255) / 2;
+    return (0xC8 << 24) | (r << 16) | (g << 8) | b;
   }
 
   private void openSettings() {
@@ -2381,8 +2397,11 @@ public class MainActivity extends Activity {
   private LinearLayout nav() {
     LinearLayout bar = horizontal();
     bar.setGravity(Gravity.CENTER_VERTICAL);
-    bar.setBackgroundColor(CARD);
+    bar.setBackgroundColor(glass() ? 0xB8FFFFFF : CARD);
     round(bar, 28);
+    if (glass() && bar.getBackground() instanceof GradientDrawable) {
+      ((GradientDrawable) bar.getBackground()).setStroke(Math.max(1, dp(1)), 0xEEFFFFFF);
+    }
     pad(bar, 4, 4, 4, 4);
     String[] labels = {"主页", "周课", "课程", "设置"};
     for (int i = 0; i < labels.length; i++) {
@@ -2482,8 +2501,8 @@ public class MainActivity extends Activity {
   private void styleButton(Button button, boolean filled) {
     GradientDrawable bg = new GradientDrawable();
     bg.setCornerRadius(dp(12));
-    bg.setColor(filled ? PINE : 0x00000000);
-    if (!filled) bg.setStroke(dp(1), LINE);
+    bg.setColor(filled ? PINE : (glass() ? 0x99FFFFFF : 0x00000000));
+    if (!filled) bg.setStroke(Math.max(1, dp(1)), glass() ? 0xCCFFFFFF : LINE);
     button.setBackground(bg);
     button.setTextColor(filled ? CREAM : INK);
     button.setPadding(dp(8), dp(6), dp(8), dp(6));
@@ -2519,12 +2538,16 @@ public class MainActivity extends Activity {
     } else {
       bg.setColor(CARD);
     }
+    if (glass() && bg.getColor() != null) {
+      bg.setColor(frost(bg.getColor().getDefaultColor()));
+      bg.setStroke(Math.max(1, dp(1)), 0xCCFFFFFF);
+    }
     view.setBackground(bg);
   }
 
   private void stroke(View view) {
     if (view.getBackground() instanceof GradientDrawable) {
-      ((GradientDrawable) view.getBackground()).setStroke(dp(1), LINE);
+      ((GradientDrawable) view.getBackground()).setStroke(Math.max(1, dp(1)), glass() ? 0xCCFFFFFF : LINE);
     }
   }
 

@@ -51,6 +51,7 @@ public final class Store {
     settings.termStart = s.optString("termStart", settings.termStart);
     settings.totalWeeks = Math.max(1, Math.min(40, s.optInt("totalWeeks", 16)));
     settings.motion = s.optString("motion", "slide");
+    settings.style = s.optString("style", "glass");
     JSONObject wake = s.optJSONObject("wake");
     if (wake != null) {
       settings.wake.wash = wake.optInt("washMin", 30);
@@ -116,6 +117,7 @@ public final class Store {
       s.put("termStart", settings.termStart);
       s.put("totalWeeks", settings.totalWeeks);
       s.put("motion", settings.motion == null ? "slide" : settings.motion);
+      s.put("style", settings.style == null ? "glass" : settings.style);
       JSONObject wake = new JSONObject();
       wake.put("washMin", settings.wake.wash);
       wake.put("commuteMin", settings.wake.commute);
