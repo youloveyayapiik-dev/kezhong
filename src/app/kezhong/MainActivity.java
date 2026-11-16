@@ -9,12 +9,9 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.RenderEffect;
-import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.AlarmClock;
 import android.provider.CalendarContract;
@@ -52,13 +49,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
-  private static final int PAPER = 0xFFF3F0E8;
-  private static final int INK = 0xFF1C1915;
-  private static final int MUTED = 0xFF6F675C;
-  private static final int PINE = 0xFF1E332C;
-  private static final int CREAM = 0xFFF4F1EA;
-  private static final int LINE = 0xFFE4DDD0;
-  private static final int CARD = 0xFFFBFBF8;
+  private int PAPER = 0xFFF3F0E8;
+  private int INK = 0xFF1C1915;
+  private int MUTED = 0xFF6F675C;
+  private int PINE = 0xFF1E332C;
+  private int CREAM = 0xFFF4F1EA;
+  private int LINE = 0xFFE4DDD0;
+  private int CARD = 0xFFFBFBF8;
   private static final int[] TONES = {0xFFE7EFEA, 0xFFF3EBE1, 0xFFE8EEF2, 0xFFF6EFE6};
   private static final int REQ_FILE = 41;
   private static final int REQ_CALENDAR = 42;
@@ -87,9 +84,10 @@ public class MainActivity extends Activity {
   }
 
   private void buildUi() {
+    applyTheme();
     FrameLayout stage = new FrameLayout(this);
-    if (glass()) stage.addView(glassBackdrop(), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-    LinearLayout root = vertical(glass() ? 0 : PAPER);
+    stage.setBackgroundColor(PAPER);
+    LinearLayout root = vertical(PAPER);
     root.addView(header());
     subtitle = text(13, MUTED);
     pad(subtitle, 20, 0, 20, 8);
@@ -179,6 +177,11 @@ public class MainActivity extends Activity {
       public void onClick(View v) { openStyle(); }
     });
     row.addView(motion, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    Button theme = button("主题", false);
+    theme.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openTheme(); }
+    });
+    row.addView(theme, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     return row;
   }
 
@@ -1912,38 +1915,104 @@ public class MainActivity extends Activity {
     return card;
   }
 
+  private void applyTheme() {
+    String theme = store.settings.theme == null ? "paper" : store.settings.theme;
+    if ("dark".equals(theme)) {
+      PAPER = 0xFF121614;
+      INK = 0xFFF3F0E8;
+      MUTED = 0xFFA8A093;
+      PINE = 0xFF2C463C;
+      CREAM = 0xFFF6F3EC;
+      LINE = 0xFF2E3833;
+      CARD = 0xFF1C2420;
+    } else if ("blue".equals(theme)) {
+      PAPER = 0xFFF2F6FB;
+      INK = 0xFF122033;
+      MUTED = 0xFF5C6E82;
+      PINE = 0xFF173E66;
+      CREAM = 0xFFF7FAFD;
+      LINE = 0xFFD5E2EE;
+      CARD = 0xFFFFFFFF;
+    } else {
+      PAPER = 0xFFF3F0E8;
+      INK = 0xFF1C1915;
+      MUTED = 0xFF6F675C;
+      PINE = 0xFF1E332C;
+      CREAM = 0xFFF4F1EA;
+      LINE = 0xFFE4DDD0;
+      CARD = 0xFFFBFBF8;
+    }
+  }
+
+  private void openTheme() {
+    final String[] keys = {"paper", "dark", "blue"};
+    final String[] names = {"默认", "深色", "蓝白"};
+    final int[] colors = {0xFFF3F0E8, 0xFF121614, 0xFFF2F6FB};
+    final int[] accents = {0xFF1E332C, 0xFF8FBFB0, 0xFF173E66};
+    String current = store.settings.theme == null ? "paper" : store.settings.theme;
+    final int[] picked = new int[] {0};
+    for (int i = 0; i < keys.length; i++) if (keys[i].equals(current)) picked[0] = i;
+    LinearLayout wrap = vertical(0);
+    pad(wrap, 16, 8, 16, 4);
+    TextView title = text(18, INK);
+    title.setText("主题");
+    title.setGravity(Gravity.CENTER);
+    title.setTypeface(Typeface.DEFAULT_BOLD);
+    pad(title, 4, 0, 4, 14);
+    wrap.addView(title);
+    final LinearLayout row = horizontal();
+    final LinearLayout[] boxes = new LinearLayout[3];
+    for (int i = 0; i < 3; i++) {
+      final int index = i;
+      LinearLayout item = vertical(0);
+      item.setGravity(Gravity.CENTER_HORIZONTAL);
+      FrameLayout card = new FrameLayout(this);
+      View face = new View(this);
+      GradientDrawable swatch = new GradientDrawable();
+      swatch.setCornerRadius(dp(18));
+      swatch.setColor(colors[i]);
+      face.setBackground(swatch);
+      card.addView(face, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+      View chip = new View(this);
+      GradientDrawable chipBg = new GradientDrawable();
+      chipBg.setCornerRadius(dp(10));
+      chipBg.setColor(accents[i]);
+      chip.setBackground(chipBg);
+      FrameLayout.LayoutParams chipLp = new FrameLayout.LayoutParams(dp(46), dp(16), Gravity.CENTER);
+      card.addView(chip, chipLp);
+      item.addView(card, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(88)));
+      TextView label = text(14, MUTED);
+      label.setText(names[i]);
+      label.setGravity(Gravity.CENTER);
+      pad(label, 0, 8, 0, 0);
+      item.addView(label);
+      item.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+          picked[0] = index;
+          for (int n = 0; n < boxes.length; n++) paintStyle(boxes[n], n == index);
+        }
+      });
+      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+      if (i > 0) lp.leftMargin = dp(8);
+      boxes[i] = item;
+      row.addView(item, lp);
+    }
+    for (int i = 0; i < boxes.length; i++) paintStyle(boxes[i], i == picked[0]);
+    wrap.addView(row);
+    new AlertDialog.Builder(this)
+        .setView(wrap)
+        .setPositiveButton("完成", new android.content.DialogInterface.OnClickListener() {
+          public void onClick(android.content.DialogInterface dialog, int which) {
+            store.settings.theme = keys[picked[0]];
+            store.save();
+            buildUi();
+          }
+        })
+        .show();
+  }
+
   private boolean glass() {
     return store == null || store.settings == null || !"plain".equals(store.settings.style);
-  }
-
-  private View glassBackdrop() {
-    FrameLayout box = new FrameLayout(this);
-    GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {0xFFC9DFF6, 0xFFF6E7D6, 0xFFD5EDE4});
-    box.setBackground(wash);
-    box.addView(orb(0xFF7EB6F2, dp(340), dp(-80), dp(-20)));
-    box.addView(orb(0xFFF3B48A, dp(280), dp(160), dp(180)));
-    box.addView(orb(0xFF8ED4C0, dp(300), dp(-60), dp(460)));
-    box.addView(orb(0xFFC9B6F0, dp(240), dp(140), dp(700)));
-    if (Build.VERSION.SDK_INT >= 31) {
-      box.setRenderEffect(RenderEffect.createBlurEffect(46f, 46f, Shader.TileMode.CLAMP));
-    }
-    return box;
-  }
-
-  private View orb(int color, int size, int left, int top) {
-    View view = new View(this);
-    GradientDrawable light = new GradientDrawable();
-    light.setShape(GradientDrawable.OVAL);
-    light.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-    light.setGradientRadius(size / 2f);
-    int edge = color & 0x00FFFFFF;
-    light.setColors(new int[] {color, edge});
-    view.setBackground(light);
-    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
-    lp.leftMargin = left;
-    lp.topMargin = top;
-    view.setLayoutParams(lp);
-    return view;
   }
 
   private int frost(int color) {

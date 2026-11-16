@@ -204,6 +204,7 @@ public final class Model {
     public List<Period> periods = defaultPeriods();
     public String motion = "slide";
     public String style = "glass";
+    public String theme = "paper";
   }
 
   public static final class WakePlan {
