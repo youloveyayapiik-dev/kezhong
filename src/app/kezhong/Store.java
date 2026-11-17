@@ -60,6 +60,8 @@ public final class Store {
       settings.wake.commute = wake.optInt("commuteMin", 45);
       settings.wake.buffer = wake.optInt("bufferMin", 15);
       settings.wake.remind = wake.optInt("classRemindMin", 20);
+      if (wake.has("otherDelta") && !wake.isNull("otherDelta")) settings.wake.otherDelta = Integer.valueOf(wake.optInt("otherDelta"));
+      if (wake.has("noonDelta") && !wake.isNull("noonDelta")) settings.wake.noonDelta = Integer.valueOf(wake.optInt("noonDelta"));
     }
     JSONArray periods = s.optJSONArray("periods");
     if (periods != null && periods.length() > 0) {
@@ -127,6 +129,8 @@ public final class Store {
       wake.put("commuteMin", settings.wake.commute);
       wake.put("bufferMin", settings.wake.buffer);
       wake.put("classRemindMin", settings.wake.remind);
+      if (settings.wake.otherDelta != null) wake.put("otherDelta", settings.wake.otherDelta.intValue());
+      if (settings.wake.noonDelta != null) wake.put("noonDelta", settings.wake.noonDelta.intValue());
       s.put("wake", wake);
       JSONArray periods = new JSONArray();
       for (Model.Period period : settings.periods) {

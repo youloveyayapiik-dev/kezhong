@@ -164,7 +164,7 @@ public class MainActivity extends Activity {
     row.setGravity(Gravity.CENTER_VERTICAL);
     pad(row, 20, 18, 12, 0);
     TextView title = text(28, INK);
-    title.setText("Class Schedule");
+    title.setText(en() ? "Class Schedule" : "课钟");
     title.setTypeface(Typeface.SERIF);
     row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     Button gear = button(tr("作息", "Hours"), false);
@@ -2121,29 +2121,39 @@ public class MainActivity extends Activity {
     final EditText wash = field(String.valueOf(store.settings.wake.wash), "洗漱分钟");
     final EditText commute = field(String.valueOf(store.settings.wake.commute), "路程分钟");
     final EditText buffer = field(String.valueOf(store.settings.wake.buffer), "容错分钟");
-    final EditText remind = field(String.valueOf(store.settings.wake.remind), "课前提醒分钟");
+    final EditText remind = field(String.valueOf(store.settings.wake.remind), tr("课前提醒分钟", "Reminder minutes"));
+    final EditText other = field(store.settings.wake.otherDelta == null ? "" : String.valueOf(store.settings.wake.otherDelta), tr("例如 -20", "e.g. -20"));
+    final EditText noon = field(store.settings.wake.noonDelta == null ? "" : String.valueOf(store.settings.wake.noonDelta), tr("例如 -20", "e.g. -20"));
     weeks.setInputType(InputType.TYPE_CLASS_NUMBER);
     wash.setInputType(InputType.TYPE_CLASS_NUMBER);
     commute.setInputType(InputType.TYPE_CLASS_NUMBER);
     buffer.setInputType(InputType.TYPE_CLASS_NUMBER);
     remind.setInputType(InputType.TYPE_CLASS_NUMBER);
-    col.addView(label("开学第一周的周一"));
+    other.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
+    noon.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
+    col.addView(label(tr("开学第一周的周一", "Monday of week 1")));
     col.addView(term);
-    col.addView(label("学期周数"));
+    col.addView(label(tr("学期周数", "Weeks in the term")));
     col.addView(weeks);
-    col.addView(label("起床 = 第一节课 − 洗漱 − 路程 − 容错"));
+    col.addView(label(tr("起床 = 早上第一节 − 洗漱 − 路程 − 容错", "Wake = first morning class − wash − commute − buffer")));
     col.addView(wash);
     col.addView(commute);
     col.addView(buffer);
     col.addView(remind);
+    col.addView(label(tr("别的课：在上面的分钟上加减，不含当天第一节。不填用默认", "Other classes: add or subtract minutes. Not the first class. Blank = default")));
+    col.addView(other);
+    col.addView(label(tr("下午第一节：单独加减。不填就跟别的课，别的课也没填就用默认", "First afternoon class: its own offset. Blank follows other classes, or the default")));
+    col.addView(noon);
+    ScrollView scroll = new ScrollView(this);
+    scroll.addView(col);
     new AlertDialog.Builder(this)
         .setTitle(tr("作息", "Hours"))
-        .setView(col)
-        .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+        .setView(scroll)
+        .setPositiveButton(tr("保存", "Save"), new android.content.DialogInterface.OnClickListener() {
           public void onClick(android.content.DialogInterface dialog, int which) {
             String date = term.getText().toString().trim();
             if (!date.matches("\\d{4}-\\d{2}-\\d{2}")) {
-              toast("开学日期写成 2026-09-07");
+              toast(tr("开学日期写成 2026-09-07", "Use a date like 2026-09-07"));
               return;
             }
             store.settings.termStart = date;
@@ -2152,6 +2162,8 @@ public class MainActivity extends Activity {
             store.settings.wake.commute = parseInt(commute.getText().toString(), 45);
             store.settings.wake.buffer = parseInt(buffer.getText().toString(), 15);
             store.settings.wake.remind = parseInt(remind.getText().toString(), 20);
+            store.settings.wake.otherDelta = readDelta(other.getText().toString());
+            store.settings.wake.noonDelta = readDelta(noon.getText().toString());
             store.save();
             weekReady = false;
             show(tab);
@@ -2430,7 +2442,8 @@ public class MainActivity extends Activity {
 
   private Calendar alarmMoment(Model.Course course, Calendar date, Calendar now) {
     int start = Model.parseMinutes(course.start);
-    int[] leads = new int[] {store.settings.wake.lead(), store.settings.wake.remind, 0};
+    int lead = store.settings.wake.leadFor(course, Model.onDate(store.courses, store.settings, date));
+    int[] leads = new int[] {lead, store.settings.wake.remind, 0};
     for (int i = 0; i < leads.length; i++) {
       Calendar at = (Calendar) date.clone();
       at.set(Calendar.SECOND, 0);
@@ -2728,6 +2741,16 @@ public class MainActivity extends Activity {
 
   private int dp(int value) {
     return Math.round(value * getResources().getDisplayMetrics().density);
+  }
+
+  private Integer readDelta(String raw) {
+    String text = raw == null ? "" : raw.trim();
+    if (text.length() == 0) return null;
+    try {
+      return Integer.valueOf(Integer.parseInt(text));
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   private int parseInt(String raw, int fallback) {

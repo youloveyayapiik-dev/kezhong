@@ -191,9 +191,33 @@ public final class Model {
     public int commute = 45;
     public int buffer = 15;
     public int remind = 20;
+    public Integer otherDelta = null;
+    public Integer noonDelta = null;
 
     public int lead() {
       return Math.max(0, wash) + Math.max(0, commute) + Math.max(0, buffer);
+    }
+
+    public int leadFor(Course course, java.util.List<Course> day) {
+      int base = lead();
+      if (course == null || day == null || day.isEmpty()) return base;
+      Course first = day.get(0);
+      if (course == first || (course.id != null && course.id.equals(first.id))) return base;
+      if (noonDelta != null && isNoonFirst(course, day)) return Math.max(0, base + noonDelta.intValue());
+      if (otherDelta != null) return Math.max(0, base + otherDelta.intValue());
+      return base;
+    }
+
+    private boolean isNoonFirst(Course course, java.util.List<Course> day) {
+      Course noon = null;
+      for (Course item : day) {
+        if (band(item.start) == 1) {
+          noon = item;
+          break;
+        }
+      }
+      if (noon == null || noon == day.get(0)) return false;
+      return course == noon || (course.id != null && course.id.equals(noon.id));
     }
   }
 
