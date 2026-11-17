@@ -2036,19 +2036,17 @@ public class MainActivity extends Activity {
     int g = (tint >> 8) & 0xFF;
     int b = tint & 0xFF;
     int lum = (r * 3 + g * 6 + b) / 10;
+    int lift = lum > 230 ? 0 : 42;
+    int hi = (0xF4 << 24)
+        | (Math.min(255, r + lift) << 16)
+        | (Math.min(255, g + lift) << 8)
+        | Math.min(255, b + lift);
+    int lo = (0xEE << 24) | (r << 16) | (g << 8) | b;
     GradientDrawable bg = new GradientDrawable();
     bg.setCornerRadius(dp(radius));
     bg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-    if (lum < 110) {
-      int hi = (0xD4 << 24) | (((r + 255) / 2) << 16) | (((g + 255) / 2) << 8) | ((b + 255) / 2);
-      int lo = (0x8C << 24) | (r << 16) | (g << 8) | b;
-      bg.setColors(new int[] {hi, lo});
-    } else {
-      int mid = (0x78 << 24) | (((r + 255) / 2) << 16) | (((g + 255) / 2) << 8) | ((b + 255) / 2);
-      int lo = (0x55 << 24) | (((r * 2 + 255) / 3) << 16) | (((g * 2 + 255) / 3) << 8) | ((b * 2 + 255) / 3);
-      bg.setColors(new int[] {0xEEFFFFFF, mid, lo});
-    }
-    bg.setStroke(Math.max(1, dp(1)), 0xF7FFFFFF);
+    bg.setColors(new int[] {hi, lo});
+    bg.setStroke(Math.max(1, dp(1)), lum < 110 ? 0x55FFFFFF : 0x66FFFFFF);
     return bg;
   }
 
@@ -2657,7 +2655,7 @@ public class MainActivity extends Activity {
 
   private void stroke(View view) {
     if (view.getBackground() instanceof GradientDrawable) {
-      ((GradientDrawable) view.getBackground()).setStroke(Math.max(1, dp(1)), glass() ? 0xCCFFFFFF : LINE);
+      ((GradientDrawable) view.getBackground()).setStroke(Math.max(1, dp(1)), glass() ? 0x55FFFFFF : LINE);
     }
   }
 
