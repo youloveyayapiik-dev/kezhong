@@ -311,7 +311,7 @@ public class MainActivity extends Activity {
       day = Model.daysBetween(now, later.date) == 1 ? "明天  " : Model.WEEKDAY[Model.isoWeekday(later.date)] + "  ";
     }
     time.setText(day + span(later.course));
-    TextView name = text(17, INK);
+    TextView name = text(17, 0xFF1C1915);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setText(later.course.name);
     card.addView(kicker);
@@ -403,10 +403,10 @@ public class MainActivity extends Activity {
     LinearLayout card = vertical(0xFFF7F1E6);
     round(card, 22);
     pad(card, 20, 16, 20, 16);
-    TextView title = text(18, INK);
+    TextView title = text(18, 0xFF1C1915);
     title.setTypeface(Typeface.DEFAULT_BOLD);
     title.setText(hello + "  " + face());
-    TextView sub = text(14, MUTED);
+    TextView sub = text(14, 0xFF5C564C);
     sub.setText(hadClass ? "今天的课到这里了" : "今天没课");
     pad(sub, 0, 4, 0, 0);
     card.addView(title);
@@ -752,7 +752,7 @@ public class MainActivity extends Activity {
     time.setText(span(course));
     box.addView(time);
     int nameLines = Math.max(1, (height - dp(32)) / dp(16));
-    TextView name = text(13, INK);
+    TextView name = text(13, 0xFF1C1915);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setMaxLines(nameLines);
     name.setText(course.name);
@@ -783,7 +783,7 @@ public class MainActivity extends Activity {
     time.setTypeface(Typeface.DEFAULT_BOLD);
     time.setText(span(course));
     time.setMaxLines(2);
-    TextView name = text(10, INK);
+    TextView name = text(10, 0xFF1C1915);
     name.setTypeface(Typeface.DEFAULT_BOLD);
     name.setMaxLines(2);
     name.setText(course.name);
@@ -888,13 +888,13 @@ public class MainActivity extends Activity {
     row.addView(stripe, new LinearLayout.LayoutParams(dp(4), ViewGroup.LayoutParams.MATCH_PARENT));
     LinearLayout col = vertical(0);
     pad(col, 12, 10, 12, 10);
-    TextView name = text(16, INK);
+    TextView name = text(16, 0xFF1C1915);
     name.setText(course.name);
-    TextView meta = text(13, MUTED);
+    TextView meta = text(13, 0xFF5C564C);
     String teacher = course.teacher.length() == 0 ? "" : "  ·  " + course.teacher;
     String place = course.location.length() == 0 ? "" : "  ·  " + course.location;
     meta.setText(span(course) + teacher + place);
-    TextView sub = text(12, MUTED);
+    TextView sub = text(12, 0xFF5C564C);
     sub.setText(extra);
     col.addView(name);
     col.addView(meta);
@@ -1833,7 +1833,7 @@ public class MainActivity extends Activity {
     final int[] picked = new int[] {"plain".equals(store.settings.style) ? 1 : 0};
     LinearLayout wrap = vertical(0);
     pad(wrap, 16, 8, 16, 4);
-    TextView title = text(18, INK);
+    TextView title = text(18, 0xFF1C1915);
     title.setText("界面风格");
     title.setGravity(Gravity.CENTER);
     title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1887,7 +1887,7 @@ public class MainActivity extends Activity {
     card.setBackground(ring);
     card.setPadding(dp(on ? 3 : 0), dp(on ? 3 : 0), dp(on ? 3 : 0), dp(on ? 3 : 0));
     TextView label = (TextView) item.getChildAt(1);
-    label.setTextColor(on ? 0xFF2F6BFF : INK);
+    label.setTextColor(on ? 0xFF2F6BFF : 0xFF1C1915);
     label.setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
   }
 
@@ -1954,7 +1954,7 @@ public class MainActivity extends Activity {
     for (int i = 0; i < keys.length; i++) if (keys[i].equals(current)) picked[0] = i;
     LinearLayout wrap = vertical(0);
     pad(wrap, 16, 8, 16, 4);
-    TextView title = text(18, INK);
+    TextView title = text(18, 0xFF1C1915);
     title.setText("主题");
     title.setGravity(Gravity.CENTER);
     title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -2522,7 +2522,7 @@ public class MainActivity extends Activity {
     for (int i = 0; i < nav.getChildCount(); i++) {
       TextView item = (TextView) nav.getChildAt(i);
       boolean on = i == tab;
-      item.setTextColor(on ? CREAM : MUTED);
+      item.setTextColor(on ? CREAM : (glass() ? 0xFF1C1915 : MUTED));
       item.setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
       GradientDrawable bg = new GradientDrawable();
       bg.setCornerRadius(dp(22));
@@ -2582,7 +2582,7 @@ public class MainActivity extends Activity {
     }
     button.setBackgroundTintList(null);
     button.setStateListAnimator(null);
-    button.setTextColor(PINE);
+    button.setTextColor(0xFF1C1915);
     button.setPadding(dp(8), dp(8), dp(8), dp(8));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     lp.topMargin = dp(14);
@@ -2612,7 +2612,7 @@ public class MainActivity extends Activity {
       if (!filled) bg.setStroke(dp(1), LINE);
       button.setBackground(bg);
     }
-    button.setTextColor(filled ? CREAM : INK);
+    button.setTextColor(filled ? CREAM : (glass() ? 0xFF1C1915 : INK));
     button.setPadding(dp(8), dp(6), dp(8), dp(6));
     button.setMinHeight(0);
     button.setMinimumHeight(dp(40));
