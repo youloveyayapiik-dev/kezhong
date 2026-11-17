@@ -123,8 +123,8 @@ public class MainActivity extends Activity {
       weekReady = true;
     }
     Integer thisWeek = Model.weekIndex(store.settings.termStart, now);
-    String weekText = thisWeek == null ? "学期还没开始" : "第 " + thisWeek + " 周";
-    subtitle.setText(weekText + "  ·  " + Model.WEEKDAY[Model.isoWeekday(now)] + " " + Model.monthDay(now));
+    String weekText = thisWeek == null ? tr("学期还没开始", "Term hasn't started") : tr("第 " + thisWeek + " 周", "Week " + thisWeek);
+    subtitle.setText(weekText + "  ·  " + weekdayName(Model.isoWeekday(now)) + " " + Model.monthDay(now));
     banner.setVisibility(store.sample ? View.VISIBLE : View.GONE);
     View page = index == 0 ? pageToday(now) : index == 1 ? pageWeek(now) : index == 2 ? pageCourses() : pageImport();
     View old = body.getChildCount() == 0 ? null : body.getChildAt(body.getChildCount() - 1);
@@ -164,24 +164,14 @@ public class MainActivity extends Activity {
     row.setGravity(Gravity.CENTER_VERTICAL);
     pad(row, 20, 18, 12, 0);
     TextView title = text(28, INK);
-    title.setText("课钟");
+    title.setText("Class Schedule");
     title.setTypeface(Typeface.SERIF);
     row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-    Button gear = button("作息", false);
+    Button gear = button(tr("作息", "Hours"), false);
     gear.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openSettings(); }
     });
     row.addView(gear, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    Button motion = button("风格", false);
-    motion.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { openStyle(); }
-    });
-    row.addView(motion, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    Button theme = button("主题", false);
-    theme.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { openTheme(); }
-    });
-    row.addView(theme, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     return row;
   }
 
@@ -189,9 +179,9 @@ public class MainActivity extends Activity {
     LinearLayout box = vertical(0xFFE7EFEA);
     pad(box, 16, 10, 16, 10);
     TextView label = text(13, PINE);
-    label.setText("现在是示例课表，用来看今天的课和起床时间。导入或自己添加后会换掉。");
+    label.setText(tr("现在是示例课表，用来看今天的课和起床时间。导入或自己添加后会换掉。", "This is a sample timetable. Import or add your own classes to replace it."));
     box.addView(label);
-    Button clear = button("清掉示例", false);
+    Button clear = button(tr("清掉示例", "Clear sample"), false);
     clear.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) {
         store.courses.clear();
@@ -217,13 +207,13 @@ public class MainActivity extends Activity {
       col.addView(banner);
     } else if (Holidays.work(now) != null) {
       TextView banner = text(14, MUTED);
-      banner.setText("调休上班  " + face());
+      banner.setText(tr("调休上班", "Adjusted workday") + "  " + face());
       pad(banner, 4, 4, 4, 8);
       col.addView(banner);
     }
     final Model.WakePlan plan = Model.planWake(store.courses, store.settings, now);
     if (plan == null) {
-      col.addView(cardText("这个学期还没有下一节课。", "先在「课程」里添加，或到「设置」导入课表。"));
+      col.addView(cardText(tr("这个学期还没有下一节课。", "No upcoming class this term."), tr("先在「课程」里添加，或到「设置」导入课表。", "Add one under Courses, or import a timetable in Settings.")));
     } else {
       col.addView(wakeCard(plan, now));
       Slot next = firstCatchable(now);
@@ -233,12 +223,12 @@ public class MainActivity extends Activity {
       if (later != null) col.addView(nextCard(later, now));
       col.addView(restCard(shown, shownDate, later, now));
     }
-    Button allCal = button("一键写入日历并提醒", false);
+    Button allCal = button(tr("一键写入日历并提醒", "Add all to calendar"), false);
     allCal.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { askCalendar(new ArrayList<Model.Course>(store.courses)); }
     });
     col.addView(allCal);
-    Button clearCal = button("清掉日历里的课", false);
+    Button clearCal = button(tr("清掉日历里的课", "Remove classes from calendar"), false);
     clearCal.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { confirmClearCalendar(); }
     });
@@ -258,9 +248,9 @@ public class MainActivity extends Activity {
     pad(card, 20, 18, 20, 16);
     TextView kicker = text(13, 0xFFD5DDD6);
     String day;
-    if (Model.sameDay(date, now)) day = skipped ? "下一节" : "今天";
-    else if (Model.daysBetween(now, date) == 1) day = "明天";
-    else day = Model.WEEKDAY[Model.isoWeekday(date)];
+    if (Model.sameDay(date, now)) day = skipped ? tr("下一节", "Next") : tr("今天", "Today");
+    else if (Model.daysBetween(now, date) == 1) day = tr("明天", "Tomorrow");
+    else day = weekdayName(Model.isoWeekday(date));
     kicker.setText(day);
     TextView time = text(32, CREAM);
     time.setTypeface(Typeface.SERIF);
@@ -281,9 +271,9 @@ public class MainActivity extends Activity {
       final int hour = ring.get(Calendar.HOUR_OF_DAY);
       final int minute = ring.get(Calendar.MINUTE);
       TextView note = text(13, 0xFFD5DDD6);
-      note.setText(Model.formatMinutes(hour * 60 + minute) + " 响");
+      note.setText(Model.formatMinutes(hour * 60 + minute) + tr(" 响", " alarm"));
       card.addView(note);
-      Button alarm = lightButton("写入系统闹钟");
+      Button alarm = lightButton(tr("写入系统闹钟", "Set system alarm"));
       alarm.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) {
           setAlarm(hour, minute, course.name);
@@ -302,13 +292,13 @@ public class MainActivity extends Activity {
     round(card, 22);
     pad(card, 20, 16, 20, 16);
     TextView kicker = text(13, PINE);
-    kicker.setText("下一节");
+    kicker.setText(tr("下一节", "Next"));
     kicker.setTypeface(Typeface.DEFAULT_BOLD);
     TextView time = text(26, PINE);
     time.setTypeface(Typeface.SERIF);
     String day = "";
     if (!Model.sameDay(later.date, now)) {
-      day = Model.daysBetween(now, later.date) == 1 ? "明天  " : Model.WEEKDAY[Model.isoWeekday(later.date)] + "  ";
+      day = Model.daysBetween(now, later.date) == 1 ? tr("明天  ", "Tomorrow  ") : weekdayName(Model.isoWeekday(later.date)) + "  ";
     }
     time.setText(day + span(later.course));
     TextView name = text(17, 0xFF1C1915);
@@ -327,15 +317,15 @@ public class MainActivity extends Activity {
       final int hour = ring.get(Calendar.HOUR_OF_DAY);
       final int minute = ring.get(Calendar.MINUTE);
       final TextView toggle = text(14, PINE);
-      toggle.setText("提前设闹钟");
+      toggle.setText(tr("提前设闹钟", "Set alarm early"));
       toggle.setTypeface(Typeface.DEFAULT_BOLD);
       pad(toggle, 0, 12, 0, 0);
       final LinearLayout panel = vertical(0);
       panel.setVisibility(View.GONE);
       TextView when = text(14, 0xFF3E5248);
-      when.setText(Model.formatMinutes(hour * 60 + minute) + " 响");
+      when.setText(Model.formatMinutes(hour * 60 + minute) + tr(" 响", " alarm"));
       pad(when, 0, 6, 0, 0);
-      Button alarm = button("写入系统闹钟", true);
+      Button alarm = button(tr("写入系统闹钟", "Set system alarm"), true);
       alarm.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) {
           setAlarm(hour, minute, later.course.name);
@@ -347,7 +337,7 @@ public class MainActivity extends Activity {
         public void onClick(View v) {
           boolean open = panel.getVisibility() != View.VISIBLE;
           panel.setVisibility(open ? View.VISIBLE : View.GONE);
-          toggle.setText(open ? "收起" : "提前设闹钟");
+          toggle.setText(open ? tr("收起", "Hide") : tr("提前设闹钟", "Set alarm early"));
         }
       });
       card.addView(toggle);
@@ -372,7 +362,7 @@ public class MainActivity extends Activity {
     stroke(card);
     pad(card, 18, 14, 18, 14);
     TextView title = text(15, INK);
-    title.setText("今天的课");
+    title.setText(tr("今天的课", "Today"));
     title.setTypeface(Typeface.DEFAULT_BOLD);
     card.addView(title);
     int nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
@@ -380,7 +370,7 @@ public class MainActivity extends Activity {
       boolean over = Model.parseMinutes(course.end) <= nowMin;
       TextView line = text(15, over ? MUTED : INK);
       String place = course.location.length() == 0 ? "" : "   " + course.location;
-      line.setText(span(course) + "   " + course.name + place + (over ? "   已上" : ""));
+      line.setText(span(course) + "   " + course.name + place + (over ? tr("   已上", "   done") : ""));
       pad(line, 0, 10, 0, 0);
       card.addView(line);
     }
@@ -407,7 +397,7 @@ public class MainActivity extends Activity {
     title.setTypeface(Typeface.DEFAULT_BOLD);
     title.setText(hello + "  " + face());
     TextView sub = text(14, 0xFF5C564C);
-    sub.setText(hadClass ? "今天的课到这里了" : "今天没课");
+    sub.setText(hadClass ? tr("今天的课到这里了", "That's all for today") : tr("今天没课", "No class today"));
     pad(sub, 0, 4, 0, 0);
     card.addView(title);
     card.addView(sub);
@@ -566,7 +556,7 @@ public class MainActivity extends Activity {
   private View pageWeek(final Calendar now) {
     LinearLayout col = vertical(0);
     TextView label = text(16, INK);
-    label.setText("第 " + week + " 周");
+    label.setText(tr("第 " + week + " 周", "Week " + week));
     label.setTypeface(Typeface.DEFAULT_BOLD);
     pad(label, 16, 8, 16, 4);
     col.addView(label);
@@ -578,7 +568,7 @@ public class MainActivity extends Activity {
     for (int w = 1; w <= store.settings.totalWeeks; w++) {
       final int value = w;
       String caption = String.valueOf(w);
-      if (w == todayWeek) caption = w + "今";
+      if (w == todayWeek) caption = en() ? w + " now" : w + "今";
       Button chip = chip(caption, w == week);
       chip.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) {
@@ -834,18 +824,18 @@ public class MainActivity extends Activity {
     ScrollView scroll = new ScrollView(this);
     LinearLayout col = vertical(0);
     pad(col, 16, 4, 16, 108);
-    Button add = button("添加课程", true);
+    Button add = button(tr("添加课程", "Add class"), true);
     add.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openEditor(null); }
     });
     col.addView(add);
     if (!store.courses.isEmpty()) {
-      Button clear = button("清空课表", false);
+      Button clear = button(tr("清空课表", "Clear timetable"), false);
       clear.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) { confirmClear(); }
       });
       col.addView(clear);
-      Button dup = button("去掉重复", false);
+      Button dup = button(tr("去掉重复", "Remove duplicates"), false);
       dup.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) { dropDuplicates(); }
       });
@@ -853,7 +843,7 @@ public class MainActivity extends Activity {
     }
     if (store.courses.isEmpty()) {
       TextView empty = text(14, MUTED);
-      empty.setText("还没有课。");
+      empty.setText(tr("还没有课。", "No classes yet."));
       pad(empty, 4, 12, 4, 0);
       col.addView(empty);
     }
@@ -870,7 +860,7 @@ public class MainActivity extends Activity {
       }
       int band = Model.band(course.start);
       if (band != lastBand) {
-        col.addView(bandLabel(Model.BAND[band]));
+        col.addView(bandLabel(en() ? (band == 0 ? "Morning" : band == 1 ? "Afternoon" : "Evening") : Model.BAND[band]));
         lastBand = band;
       }
       col.addView(courseCard(course, courseDetail(course), false));
@@ -917,9 +907,9 @@ public class MainActivity extends Activity {
     row.setOnLongClickListener(new View.OnLongClickListener() {
       public boolean onLongClick(View v) {
         new AlertDialog.Builder(MainActivity.this)
-            .setTitle("删除这节课")
+            .setTitle(tr("删除这节课", "Delete this class"))
             .setMessage(course.name)
-            .setPositiveButton("删除", new android.content.DialogInterface.OnClickListener() {
+            .setPositiveButton(tr("删除", "Delete"), new android.content.DialogInterface.OnClickListener() {
               public void onClick(android.content.DialogInterface dialog, int which) {
                 store.courses.remove(course);
                 store.sample = false;
@@ -943,22 +933,65 @@ public class MainActivity extends Activity {
     LinearLayout col = vertical(0);
     pad(col, 16, 4, 16, 28);
     TextView title = text(18, INK);
-    title.setText("设置");
+    title.setText(tr("设置", "Settings"));
     title.setTypeface(Typeface.DEFAULT_BOLD);
     pad(title, 4, 4, 4, 8);
     col.addView(title);
+    TextView langLabel = text(14, MUTED);
+    langLabel.setText(tr("语言", "Language"));
+    pad(langLabel, 4, 4, 4, 0);
+    col.addView(langLabel);
+    LinearLayout langs = horizontal();
+    Button zh = button("中文", !en());
+    Button english = button("English", en());
+    zh.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { setLang("zh"); }
+    });
+    english.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { setLang("en"); }
+    });
+    langs.addView(zh, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    LinearLayout.LayoutParams englishLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+    englishLp.leftMargin = dp(8);
+    langs.addView(english, englishLp);
+    col.addView(langs);
+    Button style = button(tr("界面风格", "Look"), false);
+    style.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openStyle(); }
+    });
+    col.addView(style);
+    Button theme = button(tr("主题配色", "Theme"), false);
+    theme.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openTheme(); }
+    });
+    col.addView(theme);
+    Button repo = button(tr("GitHub 开源地址", "GitHub repository"), false);
+    repo.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openUrl("https://github.com/youloveyayapiik-dev/kezhong"); }
+    });
+    col.addView(repo);
+    Button bugs = button(tr("GitHub 问题反馈", "Report a bug"), false);
+    bugs.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) { openUrl("https://github.com/youloveyayapiik-dev/kezhong/issues"); }
+    });
+    col.addView(bugs);
+    TextView importTitle = text(18, INK);
+    importTitle.setText(tr("导入课表", "Import"));
+    importTitle.setTypeface(Typeface.DEFAULT_BOLD);
+    pad(importTitle, 4, 16, 4, 4);
+    col.addView(importTitle);
     Button times = button(periodSummary(), false);
     times.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { openPeriods(); }
     });
     col.addView(times);
     TextView help = text(14, MUTED);
-    help.setText("支持 xls、xlsx 和 csv。可以是周一到周日的课表，或带「课程、教师、地点、星期、开始、结束」的清单。教务系统把网页另存成 xls 也可以。");
+    help.setText(tr("支持 xls、xlsx 和 csv。可以是周一到周日的课表，或带「课程、教师、地点、星期、开始、结束」的清单。", "xls, xlsx, and csv. A weekly grid, or a list with course, teacher, room, day, start, and end."));
     col.addView(help);
     if (paste == null) {
       paste = new EditText(this);
       paste.setMinLines(5);
-      paste.setHint("贴在这里");
+      paste.setHint(tr("贴在这里", "Paste here"));
       paste.setBackgroundColor(CARD);
       paste.setTextColor(INK);
       paste.setHintTextColor(MUTED);
@@ -968,12 +1001,12 @@ public class MainActivity extends Activity {
     LinearLayout.LayoutParams pasteLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(140));
     pasteLp.topMargin = dp(10);
     col.addView(paste, pasteLp);
-    Button parse = button("识别这段文字", true);
+    Button parse = button(tr("识别这段文字", "Read this text"), true);
     parse.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) { review(TableParser.fromText(paste.getText().toString(), store.settings), null); }
     });
     col.addView(parse);
-    Button file = button("从表格文件导入", false);
+    Button file = button(tr("从表格文件导入", "Import a spreadsheet"), false);
     file.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -988,7 +1021,7 @@ public class MainActivity extends Activity {
       }
     });
     col.addView(file);
-    Button picture = button("从图片识别", false);
+    Button picture = button(tr("从图片识别", "Import from a photo"), false);
     picture.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
@@ -1009,11 +1042,11 @@ public class MainActivity extends Activity {
       col.addView(line);
     }
     if (!pending.isEmpty()) {
-      Button replace = button("用这份替换课表", true);
+      Button replace = button(tr("用这份替换课表", "Replace timetable"), true);
       replace.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) { adopt(true); }
       });
-      Button merge = button("追加到现有课表", false);
+      Button merge = button(tr("追加到现有课表", "Add to timetable"), false);
       merge.setOnClickListener(new View.OnClickListener() {
         public void onClick(View v) { adopt(false); }
       });
@@ -1026,21 +1059,21 @@ public class MainActivity extends Activity {
       col.addView(line);
     }
     TextView exportTitle = text(18, INK);
-    exportTitle.setText("导出");
+    exportTitle.setText(tr("导出", "Export"));
     exportTitle.setTypeface(Typeface.DEFAULT_BOLD);
     pad(exportTitle, 4, 18, 4, 4);
     col.addView(exportTitle);
-    Button ics = button("导出日历（带提醒）", false);
+    Button ics = button(tr("导出日历（带提醒）", "Export calendar"), false);
     ics.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { share("课钟.ics", Export.ics(store), "text/calendar"); }
+      public void onClick(View v) { share("class-schedule.ics", Export.ics(store), "text/calendar"); }
     });
-    Button csv = button("导出表格", false);
+    Button csv = button(tr("导出表格", "Export spreadsheet"), false);
     csv.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { share("课钟.csv", "\uFEFF" + Export.csv(store.courses), "text/csv"); }
+      public void onClick(View v) { share("class-schedule.csv", "\uFEFF" + Export.csv(store.courses), "text/csv"); }
     });
-    Button json = button("导出备份", false);
+    Button json = button(tr("导出备份", "Export backup"), false);
     json.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { share("课钟.json", Export.json(store), "application/json"); }
+      public void onClick(View v) { share("class-schedule.json", Export.json(store), "application/json"); }
     });
     col.addView(ics);
     col.addView(csv);
@@ -1829,12 +1862,12 @@ public class MainActivity extends Activity {
 
   private void openStyle() {
     final String[] keys = {"glass", "plain"};
-    final String[] names = {"柔光玻璃", "普通"};
+    final String[] names = {tr("柔光玻璃", "Soft glass"), tr("普通", "Plain")};
     final int[] picked = new int[] {"plain".equals(store.settings.style) ? 1 : 0};
     LinearLayout wrap = vertical(0);
     pad(wrap, 16, 8, 16, 4);
     TextView title = text(18, 0xFF1C1915);
-    title.setText("界面风格");
+    title.setText(tr("界面风格", "Look"));
     title.setGravity(Gravity.CENTER);
     title.setTypeface(Typeface.DEFAULT_BOLD);
     pad(title, 4, 0, 4, 14);
@@ -1946,7 +1979,7 @@ public class MainActivity extends Activity {
 
   private void openTheme() {
     final String[] keys = {"paper", "dark", "blue"};
-    final String[] names = {"默认", "深色", "蓝白"};
+    final String[] names = {tr("默认", "Default"), tr("深色", "Dark"), tr("蓝白", "Blue")};
     final int[] colors = {0xFFF3F0E8, 0xFF121614, 0xFFF2F6FB};
     final int[] accents = {0xFF1E332C, 0xFF8FBFB0, 0xFF173E66};
     String current = store.settings.theme == null ? "paper" : store.settings.theme;
@@ -1955,7 +1988,7 @@ public class MainActivity extends Activity {
     LinearLayout wrap = vertical(0);
     pad(wrap, 16, 8, 16, 4);
     TextView title = text(18, 0xFF1C1915);
-    title.setText("主题");
+    title.setText(tr("主题配色", "Theme"));
     title.setGravity(Gravity.CENTER);
     title.setTypeface(Typeface.DEFAULT_BOLD);
     pad(title, 4, 0, 4, 14);
@@ -2009,6 +2042,36 @@ public class MainActivity extends Activity {
           }
         })
         .show();
+  }
+
+  private boolean en() {
+    return store != null && store.settings != null && "en".equals(store.settings.lang);
+  }
+
+  private String tr(String zh, String en) {
+    return en() ? en : zh;
+  }
+
+  private void setLang(String lang) {
+    if (lang.equals(store.settings.lang)) return;
+    store.settings.lang = lang;
+    store.save();
+    buildUi();
+  }
+
+  private String weekdayName(int iso) {
+    if (!en()) return Model.WEEKDAY[iso];
+    String[] names = {"", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+    if (iso < 1 || iso > 7) return "";
+    return names[iso];
+  }
+
+  private void openUrl(String url) {
+    try {
+      startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+    } catch (Exception e) {
+      toast(tr("打不开链接", "Can't open the link"));
+    }
   }
 
   private boolean glass() {
@@ -2074,7 +2137,7 @@ public class MainActivity extends Activity {
     col.addView(buffer);
     col.addView(remind);
     new AlertDialog.Builder(this)
-        .setTitle("作息")
+        .setTitle(tr("作息", "Hours"))
         .setView(col)
         .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
           public void onClick(android.content.DialogInterface dialog, int which) {
@@ -2503,7 +2566,7 @@ public class MainActivity extends Activity {
       ((GradientDrawable) bar.getBackground()).setStroke(Math.max(1, dp(1)), 0xEEFFFFFF);
     }
     pad(bar, 4, 4, 4, 4);
-    String[] labels = {"主页", "周课", "课程", "设置"};
+    String[] labels = {tr("主页", "Home"), tr("周课", "Week"), tr("课程", "Courses"), tr("设置", "Settings")};
     for (int i = 0; i < labels.length; i++) {
       final int index = i;
       TextView item = text(14, MUTED);

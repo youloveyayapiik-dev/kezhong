@@ -53,6 +53,7 @@ public final class Store {
     settings.motion = s.optString("motion", "slide");
     settings.style = s.optString("style", "glass");
     settings.theme = s.optString("theme", "paper");
+    settings.lang = s.optString("lang", "zh");
     JSONObject wake = s.optJSONObject("wake");
     if (wake != null) {
       settings.wake.wash = wake.optInt("washMin", 30);
@@ -120,6 +121,7 @@ public final class Store {
       s.put("motion", settings.motion == null ? "slide" : settings.motion);
       s.put("style", settings.style == null ? "glass" : settings.style);
       s.put("theme", settings.theme == null ? "paper" : settings.theme);
+      s.put("lang", settings.lang == null ? "zh" : settings.lang);
       JSONObject wake = new JSONObject();
       wake.put("washMin", settings.wake.wash);
       wake.put("commuteMin", settings.wake.commute);

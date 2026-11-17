@@ -205,6 +205,7 @@ public final class Model {
     public String motion = "slide";
     public String style = "glass";
     public String theme = "paper";
+    public String lang = "zh";
   }
 
   public static final class WakePlan {
