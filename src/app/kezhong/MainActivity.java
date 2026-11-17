@@ -2036,12 +2036,12 @@ public class MainActivity extends Activity {
     int g = (tint >> 8) & 0xFF;
     int b = tint & 0xFF;
     int lum = (r * 3 + g * 6 + b) / 10;
-    int lift = lum > 230 ? 0 : 42;
-    int hi = (0xF4 << 24)
+    int lift = lum > 230 ? 0 : 24;
+    int hi = (0xFF << 24)
         | (Math.min(255, r + lift) << 16)
         | (Math.min(255, g + lift) << 8)
         | Math.min(255, b + lift);
-    int lo = (0xEE << 24) | (r << 16) | (g << 8) | b;
+    int lo = (0xFF << 24) | (r << 16) | (g << 8) | b;
     GradientDrawable bg = new GradientDrawable();
     bg.setCornerRadius(dp(radius));
     bg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
