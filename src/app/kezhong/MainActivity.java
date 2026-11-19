@@ -64,6 +64,9 @@ public class MainActivity extends Activity {
   private Store store;
   private int tab;
   private int week = 1;
+  private boolean weekEdit;
+  private String pickedId;
+  private Model.Course clipboard;
   private boolean weekReady;
   private FrameLayout body;
   private LinearLayout nav;
@@ -555,11 +558,43 @@ public class MainActivity extends Activity {
 
   private View pageWeek(final Calendar now) {
     LinearLayout col = vertical(0);
+    LinearLayout titleRow = horizontal();
+    titleRow.setGravity(Gravity.CENTER_VERTICAL);
+    pad(titleRow, 16, 8, 12, 4);
     TextView label = text(16, INK);
     label.setText(tr("第 " + week + " 周", "Week " + week));
     label.setTypeface(Typeface.DEFAULT_BOLD);
-    pad(label, 16, 8, 16, 4);
-    col.addView(label);
+    titleRow.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    Button edit = button(weekEdit ? tr("完成", "Done") : tr("编辑", "Edit"), weekEdit);
+    edit.setOnClickListener(new View.OnClickListener() {
+      public void onClick(View v) {
+        weekEdit = !weekEdit;
+        show(1);
+      }
+    });
+    titleRow.addView(edit, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    col.addView(titleRow);
+    if (weekEdit) {
+      LinearLayout tools = horizontal();
+      pad(tools, 12, 0, 12, 4);
+      tools.addView(editTool(tr("删除", "Delete"), new View.OnClickListener() {
+        public void onClick(View v) { deletePicked(); }
+      }), toolLp(true));
+      tools.addView(editTool(tr("剪切", "Cut"), new View.OnClickListener() {
+        public void onClick(View v) { cutPicked(); }
+      }), toolLp(false));
+      tools.addView(editTool(tr("复制", "Copy"), new View.OnClickListener() {
+        public void onClick(View v) { copyPicked(); }
+      }), toolLp(false));
+      tools.addView(editTool(tr("粘贴", "Paste"), new View.OnClickListener() {
+        public void onClick(View v) { pasteCourse(); }
+      }), toolLp(false));
+      col.addView(tools);
+      TextView hint = text(12, MUTED);
+      hint.setText(tr("点一门课，拖动可以改星期和时间。", "Tap a class, then drag it to another day or time."));
+      pad(hint, 16, 0, 16, 4);
+      col.addView(hint);
+    }
     final HorizontalScrollView chipsScroll = new HorizontalScrollView(this);
     chipsScroll.setHorizontalScrollBarEnabled(false);
     LinearLayout chips = horizontal();
@@ -637,6 +672,7 @@ public class MainActivity extends Activity {
     boolean showNow = week == todayWeek && nowMin >= startMin && nowMin <= endMin;
     int step = hourPx < dp(20) ? 120 : 60;
     LinearLayout board = horizontal();
+    board.setClipChildren(false);
     LinearLayout left = vertical(0);
     left.addView(new View(this), new LinearLayout.LayoutParams(gutter, headerH));
     FrameLayout hours = new FrameLayout(this);
@@ -667,6 +703,7 @@ public class MainActivity extends Activity {
     left.addView(hours, new LinearLayout.LayoutParams(gutter, gridH));
     board.addView(left);
     LinearLayout right = vertical(0);
+    right.setClipChildren(false);
     LinearLayout head = horizontal();
     Calendar monday = Model.addDays(Model.parseDate(store.settings.termStart), (week - 1) * 7);
     for (int d = 1; d <= 7; d++) {
@@ -696,6 +733,7 @@ public class MainActivity extends Activity {
     }
     right.addView(head);
     FrameLayout canvas = new FrameLayout(this);
+    canvas.setClipChildren(false);
     for (int min = startMin; min <= endMin; min += 60) {
       int y = (min - startMin) * hourPx / 60;
       View line = new View(this);
@@ -714,6 +752,7 @@ public class MainActivity extends Activity {
     }
     for (int d = 1; d <= 7; d++) {
       FrameLayout column = new FrameLayout(this);
+      column.setClipChildren(false);
       for (Model.Course course : store.courses) {
         if (course.day == d && course.weeks.on(week)) column.addView(placedCourse(course, startMin, hourPx));
       }
@@ -753,8 +792,20 @@ public class MainActivity extends Activity {
       place.setText(course.location);
       box.addView(place);
     }
+    box.setTag(course);
+    if (weekEdit && course.id != null && course.id.equals(pickedId) && box.getBackground() instanceof GradientDrawable) {
+      ((GradientDrawable) box.getBackground()).setStroke(dp(2), 0xFF1E332C);
+    }
     box.setOnClickListener(new View.OnClickListener() {
-      public void onClick(View v) { openEditor(course); }
+      public void onClick(View v) {
+        if (!weekEdit) {
+          openEditor(course);
+          return;
+        }
+        if (course.id == null || course.id.length() == 0) course.id = Store.newId();
+        pickedId = course.id;
+        show(1);
+      }
     });
     FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
     lp.topMargin = top;
@@ -2114,16 +2165,16 @@ public class MainActivity extends Activity {
   }
 
   private void openSettings() {
-    LinearLayout col = vertical(0);
+    LinearLayout col = vertical(0xFFFFF8F3);
     pad(col, 16, 8, 16, 8);
-    final EditText term = field(store.settings.termStart, "开学周一 2026-09-07");
-    final EditText weeks = field(String.valueOf(store.settings.totalWeeks), "总周数");
-    final EditText wash = field(String.valueOf(store.settings.wake.wash), "洗漱分钟");
-    final EditText commute = field(String.valueOf(store.settings.wake.commute), "路程分钟");
-    final EditText buffer = field(String.valueOf(store.settings.wake.buffer), "容错分钟");
-    final EditText remind = field(String.valueOf(store.settings.wake.remind), tr("课前提醒分钟", "Reminder minutes"));
-    final EditText other = field(store.settings.wake.otherDelta == null ? "" : String.valueOf(store.settings.wake.otherDelta), tr("例如 -20", "e.g. -20"));
-    final EditText noon = field(store.settings.wake.noonDelta == null ? "" : String.valueOf(store.settings.wake.noonDelta), tr("例如 -20", "e.g. -20"));
+    final EditText term = dialogField(store.settings.termStart, "2026-09-07");
+    final EditText weeks = dialogField(String.valueOf(store.settings.totalWeeks), "16");
+    final EditText wash = dialogField(String.valueOf(store.settings.wake.wash), "30");
+    final EditText commute = dialogField(String.valueOf(store.settings.wake.commute), "45");
+    final EditText buffer = dialogField(String.valueOf(store.settings.wake.buffer), "15");
+    final EditText remind = dialogField(String.valueOf(store.settings.wake.remind), "20");
+    final EditText other = dialogField(store.settings.wake.otherDelta == null ? "" : String.valueOf(store.settings.wake.otherDelta), "-20");
+    final EditText noon = dialogField(store.settings.wake.noonDelta == null ? "" : String.valueOf(store.settings.wake.noonDelta), "-20");
     weeks.setInputType(InputType.TYPE_CLASS_NUMBER);
     wash.setInputType(InputType.TYPE_CLASS_NUMBER);
     commute.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -2131,20 +2182,22 @@ public class MainActivity extends Activity {
     remind.setInputType(InputType.TYPE_CLASS_NUMBER);
     other.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
     noon.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
-    col.addView(label(tr("开学第一周的周一", "Monday of week 1")));
+    col.addView(dialogLabel(tr("开学第一周的周一", "Monday of week 1")));
     col.addView(term);
-    col.addView(label(tr("学期周数", "Weeks in the term")));
+    col.addView(dialogLabel(tr("学期周数", "Weeks in the term")));
     col.addView(weeks);
-    col.addView(label(tr("起床 = 早上第一节 − 洗漱 − 路程 − 容错", "Wake = first morning class − wash − commute − buffer")));
+    col.addView(dialogLabel(tr("洗漱、路程、容错。起床 = 早上第一节减去这三项", "Wash, commute, buffer. Wake = first class minus these")));
     col.addView(wash);
     col.addView(commute);
     col.addView(buffer);
+    col.addView(dialogLabel(tr("课前提醒（分钟）", "Reminder before class (minutes)")));
     col.addView(remind);
-    col.addView(label(tr("别的课：在上面的分钟上加减，不含当天第一节。不填用默认", "Other classes: add or subtract minutes. Not the first class. Blank = default")));
+    col.addView(dialogLabel(tr("别的课加减分钟，不含当天第一节。不填用默认", "Other classes, minutes to add. Not the first class. Blank = default")));
     col.addView(other);
-    col.addView(label(tr("下午第一节：单独加减。不填就跟别的课，别的课也没填就用默认", "First afternoon class: its own offset. Blank follows other classes, or the default")));
+    col.addView(dialogLabel(tr("下午第一节单独加减。不填就跟别的课", "First afternoon class. Blank follows the other-classes value")));
     col.addView(noon);
     ScrollView scroll = new ScrollView(this);
+    scroll.setBackgroundColor(0xFFFFF8F3);
     scroll.addView(col);
     new AlertDialog.Builder(this)
         .setTitle(tr("作息", "Hours"))
@@ -2766,6 +2819,147 @@ public class MainActivity extends Activity {
     return r < 0 ? r + mod : r;
   }
 
+  private Button editTool(String name, View.OnClickListener listener) {
+    Button button = button(name, false);
+    button.setOnClickListener(listener);
+    return button;
+  }
+
+  private LinearLayout.LayoutParams toolLp(boolean first) {
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+    if (!first) lp.leftMargin = dp(6);
+    return lp;
+  }
+
+  private Model.Course pickedCourse() {
+    if (pickedId == null) return null;
+    for (Model.Course course : store.courses) if (pickedId.equals(course.id)) return course;
+    return null;
+  }
+
+  private Model.Course duplicate(Model.Course src) {
+    try {
+      Model.Course copy = Model.Course.fromJson(src.toJson());
+      copy.id = Store.newId();
+      return copy;
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  private void copyPicked() {
+    Model.Course course = pickedCourse();
+    if (course == null) {
+      toast(tr("先点一门课", "Tap a class first"));
+      return;
+    }
+    clipboard = duplicate(course);
+    toast(tr("已复制", "Copied"));
+  }
+
+  private void cutPicked() {
+    Model.Course course = pickedCourse();
+    if (course == null) {
+      toast(tr("先点一门课", "Tap a class first"));
+      return;
+    }
+    clipboard = duplicate(course);
+    store.courses.remove(course);
+    pickedId = null;
+    store.sample = false;
+    store.save();
+    show(1);
+    toast(tr("已剪切", "Cut"));
+  }
+
+  private void deletePicked() {
+    Model.Course course = pickedCourse();
+    if (course == null) {
+      toast(tr("先点一门课", "Tap a class first"));
+      return;
+    }
+    store.courses.remove(course);
+    pickedId = null;
+    store.sample = false;
+    store.save();
+    show(1);
+  }
+
+  private void pasteCourse() {
+    if (clipboard == null) {
+      toast(tr("还没有复制的课", "Nothing to paste"));
+      return;
+    }
+    Model.Course copy = duplicate(clipboard);
+    if (copy == null) return;
+    store.courses.add(copy);
+    pickedId = copy.id;
+    store.sample = false;
+    store.save();
+    show(1);
+    toast(tr("已粘贴，可以再拖到想去的位置", "Pasted. Drag it where you want."));
+  }
+
+  private void finishDrag(View view) {
+    if (!(view.getTag() instanceof Model.Course)) return;
+    Model.Course course = (Model.Course) view.getTag();
+    int dayW = dp(96);
+    int hourPx = Math.max(1, dp(58));
+    int dayShift = Math.round(view.getTranslationX() / dayW);
+    int minShift = Math.round(view.getTranslationY() * 60f / hourPx / 5f) * 5;
+    int duration = Math.max(20, Model.parseMinutes(course.end) - Model.parseMinutes(course.start));
+    int start = Model.parseMinutes(course.start) + minShift;
+    if (start < 6 * 60) start = 6 * 60;
+    if (start + duration > 23 * 60) start = 23 * 60 - duration;
+    int day = course.day + dayShift;
+    if (day < 1) day = 1;
+    if (day > 7) day = 7;
+    course.day = day;
+    course.start = Model.formatMinutes(start);
+    course.end = Model.formatMinutes(start + duration);
+    if (course.id == null || course.id.length() == 0) course.id = Store.newId();
+    pickedId = course.id;
+    store.sample = false;
+    store.save();
+    show(1);
+  }
+
+  private View findCourse(View view, float x, float y) {
+    if (!(view instanceof ViewGroup)) return null;
+    ViewGroup group = (ViewGroup) view;
+    for (int i = group.getChildCount() - 1; i >= 0; i--) {
+      View child = group.getChildAt(i);
+      float cx = x - child.getLeft() - child.getTranslationX();
+      float cy = y - child.getTop() - child.getTranslationY();
+      if (cx < 0 || cy < 0 || cx > child.getWidth() || cy > child.getHeight()) continue;
+      if (child.getTag() instanceof Model.Course) return child;
+      View nested = findCourse(child, cx, cy);
+      if (nested != null) return nested;
+    }
+    return null;
+  }
+
+  private EditText dialogField(String value, String hint) {
+    EditText edit = field(value, hint);
+    edit.setTextColor(0xFF1C1915);
+    edit.setHintTextColor(0xFF7A7268);
+    edit.setTextSize(16);
+    GradientDrawable bg = new GradientDrawable();
+    bg.setColor(0xFFFFFFFF);
+    bg.setCornerRadius(dp(8));
+    bg.setStroke(dp(1), 0xFFC9C0B4);
+    edit.setBackground(bg);
+    pad(edit, 10, 8, 10, 8);
+    return edit;
+  }
+
+  private TextView dialogLabel(String value) {
+    TextView view = text(14, 0xFF1C1915);
+    view.setText(value);
+    pad(view, 2, 10, 2, 4);
+    return view;
+  }
+
   private void toast(String message) {
     Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
   }
@@ -2778,6 +2972,8 @@ public class MainActivity extends Activity {
     private float lastY;
     private boolean dragged;
     private boolean pinched;
+    private View dragView;
+    private boolean movingCourse;
     private final ScaleGestureDetector scaler;
 
     ZoomPane() {
@@ -2858,11 +3054,29 @@ public class MainActivity extends Activity {
           lastY = event.getY();
           dragged = false;
           pinched = false;
+          movingCourse = false;
+          dragView = null;
+          if (weekEdit && getChildCount() > 0) {
+            float bx = (event.getX() - tx) / scale;
+            float by = (event.getY() - ty) / scale;
+            dragView = findCourse(getChildAt(0), bx, by);
+          }
           return true;
         case MotionEvent.ACTION_MOVE:
           if (scaler.isInProgress()) return true;
           float dx = event.getX() - lastX;
           float dy = event.getY() - lastY;
+          if (dragView != null) {
+            if (Math.abs(dx) + Math.abs(dy) > dp(4)) movingCourse = true;
+            if (movingCourse) {
+              dragView.setTranslationX(dragView.getTranslationX() + dx / scale);
+              dragView.setTranslationY(dragView.getTranslationY() + dy / scale);
+              dragged = true;
+              lastX = event.getX();
+              lastY = event.getY();
+              return true;
+            }
+          }
           if (Math.abs(dx) + Math.abs(dy) > dp(3)) dragged = true;
           tx += dx;
           ty += dy;
@@ -2872,6 +3086,12 @@ public class MainActivity extends Activity {
           apply();
           return true;
         case MotionEvent.ACTION_UP:
+          if (dragView != null && movingCourse) {
+            finishDrag(dragView);
+            dragView = null;
+            return true;
+          }
+          dragView = null;
           if (!dragged && !pinched) tap(event.getX(), event.getY());
           return true;
         default:
