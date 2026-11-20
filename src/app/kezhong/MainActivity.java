@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
   private boolean weekEdit;
   private String pickedId;
   private Model.Course clipboard;
+  private String editBaseline;
+  private final java.util.ArrayList<String> undoSteps = new java.util.ArrayList<String>();
   private boolean weekReady;
   private FrameLayout body;
   private LinearLayout nav;
@@ -565,10 +567,27 @@ public class MainActivity extends Activity {
     label.setText(tr("第 " + week + " 周", "Week " + week));
     label.setTypeface(Typeface.DEFAULT_BOLD);
     titleRow.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    if (weekEdit) {
+      Button cancel = button(tr("取消保存", "Discard"), false);
+      cancel.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) { cancelEdit(); }
+      });
+      LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+      cancelLp.rightMargin = dp(6);
+      titleRow.addView(cancel, cancelLp);
+    }
     Button edit = button(weekEdit ? tr("完成", "Done") : tr("编辑", "Edit"), weekEdit);
     edit.setOnClickListener(new View.OnClickListener() {
       public void onClick(View v) {
-        weekEdit = !weekEdit;
+        if (!weekEdit) {
+          editBaseline = coursesJson();
+          undoSteps.clear();
+          weekEdit = true;
+        } else {
+          weekEdit = false;
+          editBaseline = null;
+          undoSteps.clear();
+        }
         show(1);
       }
     });
@@ -577,8 +596,8 @@ public class MainActivity extends Activity {
     if (weekEdit) {
       LinearLayout tools = horizontal();
       pad(tools, 12, 0, 12, 4);
-      tools.addView(editTool(tr("删除", "Delete"), new View.OnClickListener() {
-        public void onClick(View v) { deletePicked(); }
+      tools.addView(editTool(tr("撤销", "Undo"), new View.OnClickListener() {
+        public void onClick(View v) { undoEdit(); }
       }), toolLp(true));
       tools.addView(editTool(tr("剪切", "Cut"), new View.OnClickListener() {
         public void onClick(View v) { cutPicked(); }
@@ -807,12 +826,32 @@ public class MainActivity extends Activity {
         show(1);
       }
     });
+    FrameLayout host = new FrameLayout(this);
+    host.setTag(course);
+    host.addView(box, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+    if (weekEdit) {
+      TextView close = text(12, 0xFFFFFFFF);
+      close.setText("×");
+      close.setGravity(Gravity.CENTER);
+      close.setIncludeFontPadding(false);
+      GradientDrawable mark = new GradientDrawable();
+      mark.setShape(GradientDrawable.OVAL);
+      mark.setColor(0xFF1C1915);
+      close.setBackground(mark);
+      close.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) { removeCourse(course); }
+      });
+      FrameLayout.LayoutParams markLp = new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.TOP | Gravity.END);
+      markLp.topMargin = dp(1);
+      markLp.rightMargin = dp(1);
+      host.addView(close, markLp);
+    }
     FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
     lp.topMargin = top;
     lp.leftMargin = dp(1);
     lp.rightMargin = dp(1);
-    box.setLayoutParams(lp);
-    return box;
+    host.setLayoutParams(lp);
+    return host;
   }
 
   private View miniCourse(final Model.Course course, final Calendar date) {
@@ -2854,7 +2893,7 @@ public class MainActivity extends Activity {
       return;
     }
     clipboard = duplicate(course);
-    toast(tr("已复制", "Copied"));
+    toast(tr("已复制，换周后也能粘贴", "Copied. You can paste it on another week."));
   }
 
   private void cutPicked() {
@@ -2863,23 +2902,20 @@ public class MainActivity extends Activity {
       toast(tr("先点一门课", "Tap a class first"));
       return;
     }
+    remember();
     clipboard = duplicate(course);
     store.courses.remove(course);
     pickedId = null;
     store.sample = false;
     store.save();
     show(1);
-    toast(tr("已剪切", "Cut"));
+    toast(tr("已剪切，换周后也能粘贴", "Cut. You can paste it on another week."));
   }
 
-  private void deletePicked() {
-    Model.Course course = pickedCourse();
-    if (course == null) {
-      toast(tr("先点一门课", "Tap a class first"));
-      return;
-    }
+  private void removeCourse(Model.Course course) {
+    remember();
     store.courses.remove(course);
-    pickedId = null;
+    if (course.id != null && course.id.equals(pickedId)) pickedId = null;
     store.sample = false;
     store.save();
     show(1);
@@ -2892,16 +2928,72 @@ public class MainActivity extends Activity {
     }
     Model.Course copy = duplicate(clipboard);
     if (copy == null) return;
+    copy.weeks.kind = "list";
+    copy.weeks.from = week;
+    copy.weeks.to = week;
+    copy.weeks.list = new int[] {week};
+    remember();
     store.courses.add(copy);
     pickedId = copy.id;
     store.sample = false;
     store.save();
     show(1);
-    toast(tr("已粘贴，可以再拖到想去的位置", "Pasted. Drag it where you want."));
+    toast(tr("已粘贴到第 " + week + " 周", "Pasted onto week " + week));
+  }
+
+  private String coursesJson() {
+    try {
+      JSONArray arr = new JSONArray();
+      for (Model.Course course : store.courses) arr.put(course.toJson());
+      return arr.toString();
+    } catch (Exception e) {
+      return "[]";
+    }
+  }
+
+  private void remember() {
+    undoSteps.add(coursesJson());
+    if (undoSteps.size() > 30) undoSteps.remove(0);
+  }
+
+  private void restoreCourses(String raw) {
+    try {
+      JSONArray arr = new JSONArray(raw);
+      store.courses.clear();
+      for (int i = 0; i < arr.length(); i++) {
+        Model.Course course = Model.Course.fromJson(arr.getJSONObject(i));
+        if (course.id == null || course.id.length() == 0) course.id = Store.newId();
+        store.courses.add(course);
+      }
+      store.sample = false;
+      store.save();
+    } catch (Exception e) {
+      toast(tr("没能恢复", "Couldn't restore"));
+    }
+  }
+
+  private void undoEdit() {
+    if (undoSteps.isEmpty()) {
+      toast(tr("没有可撤销的操作", "Nothing to undo"));
+      return;
+    }
+    restoreCourses(undoSteps.remove(undoSteps.size() - 1));
+    show(1);
+  }
+
+  private void cancelEdit() {
+    if (editBaseline != null) restoreCourses(editBaseline);
+    weekEdit = false;
+    editBaseline = null;
+    undoSteps.clear();
+    pickedId = null;
+    show(1);
+    toast(tr("已取消，改动没保存", "Canceled. Changes were not saved."));
   }
 
   private void finishDrag(View view) {
     if (!(view.getTag() instanceof Model.Course)) return;
+    remember();
     Model.Course course = (Model.Course) view.getTag();
     int dayW = dp(96);
     int hourPx = Math.max(1, dp(58));
